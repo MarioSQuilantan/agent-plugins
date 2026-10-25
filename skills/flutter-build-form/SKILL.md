@@ -3,7 +3,7 @@ name: flutter-build-form
 description: Builds a Flutter form with formz inputs, a Cubit, and stateless field widgets, wired to an existing use case. Use when adding a form, adding fields to a form, or changing form validation.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
 ---
 # Building a Form
 
@@ -37,7 +37,7 @@ submit: SignInUseCase
 - [ ] **4. Error text.** Add an extension on each error enum that returns the message. When the project has localizations, the extension takes them as a parameter (`String text(AppLocalizations l10n)`) and the form widget passes `AppLocalizations.of(context)`. An input never reads a `BuildContext`.
 - [ ] **5. State.** One class with the inputs, `FormzMixin`, a `FormzSubmissionStatus`, and the last `Failure`, with value equality. Not a sealed class and not a Freezed union. Write it with Freezed when `pubspec.yaml` already depends on `freezed`; otherwise extend `Equatable` and write `copyWith` by hand. Do not add Freezed for a form.
 - [ ] **6. Cubit.** One method per field change, plus `submit`. `submit` marks every input dirty, stops when `Formz.validate` fails, ignores a call while in progress, sets `inProgress`, runs the use case, returns if the Cubit closed while waiting, and emits `success` or `failure`.
-- [ ] **7. Page.** Provide the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and react to `status` in a `BlocListener` (snackbar, navigation).
+- [ ] **7. Page.** Provide the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and react to `status` in a `BlocListener` (snackbar, navigation). A sign-in or sign-up form does not navigate on success: the session changes and the router redirect moves the user.
 - [ ] **8. Form and fields.** The form widget reads the Cubit and passes values, errors, and callbacks to stateless field widgets. Rebuild each field with its own `BlocSelector` so a keystroke does not rebuild the whole form.
 - [ ] **9. Register.** Annotate the Cubit like its siblings, `@injectable` by default. Regenerate the injection config with the project's `build_runner` command.
 - [ ] **10. Tests.** Test each input's `validator`, the Cubit transitions with `blocTest` (invalid submit, in progress, success, failure), and the field widgets with plain values. Mock the use case with the project's mock library, or `mocktail` when there is none, and register a fallback value for its params type.
@@ -244,7 +244,6 @@ class LoginPage extends StatelessWidget {
               const SnackBar(content: Text('Sign in failed')),
             );
           }
-          if (state.status.isSuccess) context.go('/');
         },
         child: const Scaffold(body: LoginForm()),
       ),
@@ -379,5 +378,7 @@ void main() {
   );
 }
 ```
+
+After a successful sign-in, `SignInUseCase` saves the session, `SessionCubit` emits `SessionAuthenticated`, and the router redirect leaves `/login`. A form that does not change the session, such as editing a profile, navigates from its `BlocListener` on success.
 
 `PasswordField` is stateful only for the visibility toggle. Its value still lives in the Cubit. Widget tests and previews target `EmailField` and `PasswordField` with plain values, and `LoginForm` with `BlocProvider.value` and a Cubit built from a mocked use case.

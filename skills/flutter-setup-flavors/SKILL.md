@@ -143,6 +143,8 @@ void main() => bootstrap('dev');
 
 For a single environment, the implementation has no `env`, `configureDependencies()` takes no argument, and `main.dart` calls it before `runApp`.
 
+When the app restores a session or loads other state at startup, make `bootstrap` return `Future<void>`, await that work after `configureDependencies` and before `runApp`, and declare `Future<void> main() => bootstrap('dev');`.
+
 ## Android
 
 ```kotlin

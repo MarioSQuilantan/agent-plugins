@@ -3,7 +3,7 @@ name: flutter-wrap-package-service
 description: Wraps an infrastructure package (HTTP client, Firebase, secure storage, image picker, sharing, location, permissions) behind a core service interface and impl registered with injectable. Use when adding, replacing, or using a package that does I/O, calls platform channels, or exposes a vendor API.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
 ---
 # Wrapping a Package in a Core Service
 
@@ -15,7 +15,7 @@ For HTTP, use `flutter-use-http-package`, which defines `NetworkService`. This s
 
 Wrap a package when it does I/O, calls platform channels, or exposes a vendor API: Firebase, `flutter_secure_storage`, `shared_preferences`, `image_picker`, `share_plus`, `geolocator`, `permission_handler`, `url_launcher`, analytics SDKs, and HTTP clients.
 
-Do not wrap architecture or pure-Dart utility packages: `flutter_bloc`, `go_router`, `fpdart`, `injectable`, `get_it`, `equatable`, `meta`, `collection`, `intl`, `freezed_annotation`, `json_annotation`.
+Do not wrap architecture or pure-Dart utility packages: `flutter_bloc`, `go_router`, `fpdart`, `injectable`, `get_it`, `equatable`, `formz`, `meta`, `collection`, `intl`, `freezed_annotation`, `json_annotation`. `envied` is not wrapped either; only `AppConfig` implementations in `core/config/` import it.
 
 ## Workflow
 

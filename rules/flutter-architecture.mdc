@@ -64,7 +64,7 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
 - `core/forms`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
 - `core/network`: the `NetworkService` interface and its impl. Only the impl knows the HTTP client.
-- `core/storage`: storage services, including secure storage and local persistence.
+- `core/storage`: storage services, including secure storage and local persistence, and the shared storage keys (`StorageKeys`).
 - `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
 
 Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature. Move a feature input to `core/forms/` when a second feature needs it.
@@ -79,11 +79,11 @@ The service interface uses app types only. SDK types (`Dio`, `Response`, `Docume
 
 Name the service after the capability (`NetworkService`, `SecureStorageService`), not the package, unless sibling services use package names. Expose only the methods the app uses. Reuse an existing service for an SDK; never write a second wrapper.
 
-Architecture and pure-Dart utility packages are imported where their layer allows them: `flutter_bloc` and `go_router` in presentation; `fpdart`, `equatable`, `meta`, and `collection` in any layer; `injectable` annotations on any injectable class; `freezed_annotation` and `json_annotation` where those generators are already used.
+Architecture and pure-Dart utility packages are imported where their layer allows them: `flutter_bloc` and `go_router` in presentation; `formz` in presentation and `core/forms/`; `envied` only in `core/config/`; `fpdart`, `equatable`, `meta`, and `collection` in any layer; `injectable` annotations on any injectable class; `freezed_annotation` and `json_annotation` where those generators are already used.
 
 ## Dependency direction
 
-The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
+The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. A repository method that watches changes (`watchSession`) returns a `Stream` of entities instead and emits only values that were already saved. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
 
 Domain imports neither `data/` nor `presentation/`, and it does not import Flutter.
 
@@ -128,7 +128,7 @@ Copy the annotation from the nearest registration. When no sample exists, use:
 - `@lazySingleton` for an app-wide Cubit, such as the session, that the router or several pages read. Provide it once above `MaterialApp.router` with `BlocProvider.value`.
 - A `@lazySingleton` getter in a `@module` under `core/di/` for an SDK instance.
 
-Regenerate the injection config with the project's existing `build_runner` command when registrations change. Integration tests call the project's DI setup (for example `configureDependencies()`) before `pumpWidget`. Do not add another DI library.
+Regenerate the injection config with the project's existing `build_runner` command when registrations change. Integration tests call the project's DI setup before `pumpWidget`: `configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors. Do not add another DI library.
 
 ## Navigation, imports, and safety
 
@@ -142,7 +142,7 @@ Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive 
 
 ## Tests
 
-Use the project's mock library. When the project has none, add `mocktail` and `bloc_test` as dev dependencies. Mock the dependency one layer down: the core service for a datasource, the repository contract for a use case, and the use case for a Cubit. Test Cubits with `blocTest`. Register a fallback value in `setUpAll` for each custom argument type used with `any()`.
+Use the project's mock library. When the project has none, add `mocktail` and `bloc_test` as dev dependencies, even when a `dart-*` skill suggests `mockito`. Mock the dependency one layer down: the core service for a datasource, the repository contract for a use case, and the use case for a Cubit. Test Cubits with `blocTest`. Register a fallback value in `setUpAll` for each custom argument type used with `any()`.
 
 ## Reuse and scope
 

@@ -3,7 +3,7 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
 ---
 # Adding a Flutter Feature
 
@@ -18,7 +18,7 @@ Read the nearest feature first and copy its folders, names, imports, annotations
 Copy this checklist and complete it in order.
 
 - [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/` with value equality (`Equatable`, or Freezed when the project uses it). No Flutter, JSON, or HTTP types.
-- [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`.
+- [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`, except a `watch` method, which returns a `Stream` of entities.
 - [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). Skip the use case only when the operation forwards a single repository call and adds no rule.
 - [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
 - [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
@@ -26,7 +26,7 @@ Copy this checklist and complete it in order.
 - [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
 - [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the `await`.
 - [ ] **9. UI.** Add a page under `presentation/pages/` that provides the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view from `presentation/widgets/`. The view receives state and callbacks. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
-- [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, and `@injectable` for use cases and Cubits. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
+- [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, `@injectable` for use cases and screen Cubits, and `@lazySingleton` for an app-wide Cubit such as the session. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
 - [ ] **11. Route.** Add the page to the existing GoRouter table.
 - [ ] **12. Tests.** Test the datasource with a mocked core service, and test the use case and the Cubit transitions when the behavior can fail or branch. Use the mock library already in the project; when there is none, add `mocktail` and `bloc_test` as dev dependencies. Test Cubits with `blocTest`.
 - [ ] **13. Checks.** Run the formatter, `dart analyze`, and the relevant tests. Report which commands ran.
@@ -46,6 +46,7 @@ lib/features/<feature>/
 │   └── use_cases/
 └── presentation/
     ├── cubit/
+    ├── inputs/
     ├── pages/
     └── widgets/
 ```
@@ -56,7 +57,33 @@ Move feature code into `core/` only when two features already use it.
 
 ## Call chain
 
-Datasource, the only place that creates a `Failure`:
+The example is sign-in end to end: authenticate remotely, apply a business rule, persist the token, and publish the session that the router reads.
+
+Domain entity and contract. The token is an opaque string; the domain does not know how it is stored or sent:
+
+```dart
+class AuthSession extends Equatable {
+  const AuthSession({required this.user, required this.accessToken});
+
+  final User user;
+  final String accessToken;
+
+  @override
+  List<Object?> get props => [user, accessToken];
+}
+
+abstract class AuthRepository {
+  TaskEither<Failure, AuthSession> signIn({
+    required String email,
+    required String password,
+  });
+  TaskEither<Failure, Unit> saveSession(AuthSession session);
+  TaskEither<Failure, Unit> signOut();
+  Stream<User?> watchSession();
+}
+```
+
+Datasources, the only place that creates a `Failure`. The remote one calls the API; the local one stores the token through `SecureStorageService` with the shared key from `core/storage/storage_keys.dart`:
 
 ```dart
 @lazySingleton
@@ -65,38 +92,95 @@ class AuthRemoteDataSource {
 
   final NetworkService _network;
 
-  TaskEither<Failure, UserModel> signIn(SignInRequest request) =>
+  TaskEither<Failure, AuthSessionModel> signIn(SignInRequest request) =>
       TaskEither.tryCatch(
         () async {
           final json = await _network.post('/auth/login', body: request.toJson());
-          return UserModel.fromJson(json as Map<String, dynamic>);
+          return AuthSessionModel.fromJson(json as Map<String, dynamic>);
+        },
+        mapToFailure,
+      );
+}
+
+@lazySingleton
+class AuthLocalDataSource {
+  AuthLocalDataSource(this._storage);
+
+  final SecureStorageService _storage;
+
+  TaskEither<Failure, Unit> saveToken(String token) => TaskEither.tryCatch(
+        () async {
+          await _storage.write(StorageKeys.accessToken, token);
+          return unit;
+        },
+        mapToFailure,
+      );
+
+  TaskEither<Failure, Unit> deleteToken() => TaskEither.tryCatch(
+        () async {
+          await _storage.delete(StorageKeys.accessToken);
+          return unit;
         },
         mapToFailure,
       );
 }
 ```
 
-Repository, which maps without catching:
+```dart
+// core/storage/storage_keys.dart
+abstract final class StorageKeys {
+  static const accessToken = 'access_token';
+}
+```
+
+Repository, which combines both datasources, maps without catching, and publishes the session only after it is saved. It keeps the current user so a late subscriber, such as a lazy session Cubit, still receives the session restored at startup:
 
 ```dart
 @LazySingleton(as: AuthRepository)
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._remote);
+  AuthRepositoryImpl(this._remote, this._local);
 
   final AuthRemoteDataSource _remote;
+  final AuthLocalDataSource _local;
+  final _session = StreamController<User?>.broadcast();
+  User? _currentUser;
+
+  void _publish(User? user) {
+    _currentUser = user;
+    _session.add(user);
+  }
 
   @override
-  TaskEither<Failure, User> signIn({
+  TaskEither<Failure, AuthSession> signIn({
     required String email,
     required String password,
   }) =>
       _remote
           .signIn(SignInRequest(email: email, password: password))
           .map((model) => model.toEntity());
+
+  @override
+  TaskEither<Failure, Unit> saveSession(AuthSession session) =>
+      _local.saveToken(session.accessToken).map((_) {
+        _publish(session.user);
+        return unit;
+      });
+
+  @override
+  TaskEither<Failure, Unit> signOut() => _local.deleteToken().map((_) {
+        _publish(null);
+        return unit;
+      });
+
+  @override
+  Stream<User?> watchSession() async* {
+    yield _currentUser;
+    yield* _session.stream;
+  }
 }
 ```
 
-Use case with a business rule (field checks such as "required" already ran in the form inputs):
+Use case with a business rule. In this example `User` also has an `isEmailVerified` field. Field checks such as "required" already ran in the form inputs. The session is saved only when the rule passes, so the router never sees a session that is about to be rejected:
 
 ```dart
 @injectable
@@ -108,14 +192,69 @@ class SignInUseCase {
   TaskEither<Failure, User> call(SignInParams params) => _repository
       .signIn(email: params.email, password: params.password)
       .flatMap(
-        (user) => user.isEmailVerified
-            ? TaskEither.right(user)
+        (session) => session.user.isEmailVerified
+            ? _repository.saveSession(session).map((_) => session.user)
             : TaskEither.left(const EmailNotVerifiedFailure()),
       );
 }
 ```
 
-The sign-in screen has input fields, so its Cubit is the form Cubit in `flutter-build-form`, which calls `SignInUseCase`.
+The sign-in screen has input fields, so its Cubit is the form Cubit in `flutter-build-form`, which calls `SignInUseCase`. It does not navigate on success: the session Cubit changes, and the router redirect in `flutter-setup-declarative-routing` moves the user.
+
+App-wide session Cubit. Watching and signing out forward a single repository call, so it calls the repository directly:
+
+```dart
+sealed class SessionState extends Equatable {
+  const SessionState();
+
+  @override
+  List<Object?> get props => [];
+}
+
+class SessionUnauthenticated extends SessionState {
+  const SessionUnauthenticated();
+}
+
+class SessionAuthenticated extends SessionState {
+  const SessionAuthenticated(this.user);
+  final User user;
+
+  @override
+  List<Object?> get props => [user];
+}
+
+@lazySingleton
+class SessionCubit extends Cubit<SessionState> {
+  SessionCubit(this._repository) : super(const SessionUnauthenticated()) {
+    _subscription = _repository.watchSession().listen(
+          (user) => emit(
+            user == null
+                ? const SessionUnauthenticated()
+                : SessionAuthenticated(user),
+          ),
+        );
+  }
+
+  final AuthRepository _repository;
+  late final StreamSubscription<User?> _subscription;
+
+  Future<void> signOut() async {
+    final result = await _repository.signOut().run();
+    if (isClosed) return;
+    result.match((_) => emit(const SessionUnauthenticated()), (_) {});
+  }
+
+  @override
+  Future<void> close() {
+    _subscription.cancel();
+    return super.close();
+  }
+}
+```
+
+On success the session stream emits `null`. If deleting the token fails, `signOut` still ends the session in memory.
+
+To keep the user signed in across launches, add a `RestoreSessionUseCase` that reads the stored token, loads the user, and publishes the session through the repository. Make `bootstrap` async and await it before `runApp`. When a request fails with `UnauthorizedFailure`, the page's `BlocListener` calls `context.read<SessionCubit>().signOut()`; a Cubit never calls another Cubit.
 
 A screen that loads data or performs one action uses a sealed state. For a profile screen backed by a `GetProfileUseCase` that returns `TaskEither<Failure, User>`:
 
@@ -170,4 +309,23 @@ class ProfileCubit extends Cubit<ProfileState> {
 }
 ```
 
-The page wraps `ProfileView` in `BlocProvider(create: (_) => getIt<ProfileCubit>()..load())`. `ProfileView` renders one branch per sealed state with `BlocBuilder`, and any navigation runs from a `BlocListener`. Neither calls the repository, the datasource, or a service.
+```dart
+class ProfilePage extends StatelessWidget {
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => getIt<ProfileCubit>()..load(),
+      child: BlocBuilder<ProfileCubit, ProfileState>(
+        builder: (context, state) => ProfileView(
+          state: state,
+          onRetry: context.read<ProfileCubit>().load,
+        ),
+      ),
+    );
+  }
+}
+```
+
+`ProfileView` is a `StatelessWidget` that takes `state` and `onRetry` and renders one branch per sealed state with a `switch`. It never reads the Cubit, so previews and widget tests pump it with plain values. Any navigation runs from a `BlocListener` in the page. Neither widget calls the repository, the datasource, or a service.

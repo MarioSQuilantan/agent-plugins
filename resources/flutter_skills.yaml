@@ -19,7 +19,7 @@
 
     2. **Interactive Exploration (Flutter Driver MCP)**
         * Once configured, use the `flutter-driver` MCP tools to explore the app:
-            1.  **Launch**: Use `launch_app` with `target: "lib/main_test.dart"`.
+            1.  **Launch**: Use `launch_app` with `target: "lib/main_driver.dart"`. Do not name the driver entry point `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points.
             2.  **Inspect**: Use `get_widget_tree` to find `Key`s, `Text`, or `Type`s.
             3.  **Interact**: Use `tap`, `enter_text`, and `scroll` to execute your flow.
             4.  **Wait**: Always call `waitFor` or check `get_health` if transitions are slow.
@@ -38,7 +38,7 @@
         * For scrolling, `integration_test` allows using `tester.scrollUntilVisible` to scroll to a specific item.
         * When working with `flutter_driver` (for migration or specific scenarios), `waitFor` is used to locate widgets, and `waitForAbsent` to ensure a widget is not present. `flutter_driver` also uses `driver.tap` for interactions and `driver.scroll` for scrolling.
         * Add `Key` parameters to widgets, such as `ValueKey('increment')`, to allow finding specific widgets within the test suite.
-        * If the app uses `get_it` and `injectable`, call the project's DI setup (for example `configureDependencies()`) before `pumpWidget`, reset it with `getIt.reset()` in `tearDown` when several tests set it up, and register fakes for core services such as `NetworkService` when the test must not reach the real backend.
+        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and register fakes for core services such as `NetworkService` when the test must not reach the real backend.
 
     5. **Running Integration Tests:**
         * Integration tests can be run on a physical device or emulator using the `flutter drive` command.
@@ -122,7 +122,10 @@
     *   Multiple preview configurations can be created by applying multiple `@Preview` annotations to a single function or constructor.
     *   For common configurations, extend `MultiPreview` to create a custom annotation. `MultiPreview` also provides a `transform()` method to perform transformations on each preview at runtime.
 
-    2. Interacting with Previews:
+    2. Previews in a Cubit project:
+    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders.
+
+    3. Interacting with Previews:
     *   As of Flutter 3.38, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
     *   Alternatively, the previewer can be started from the command line by navigating to the Flutter project's root directory and running `flutter widget-preview start`. This command launches a local server and opens a Widget Preview environment in Chrome that updates automatically with project changes.
   resources:
@@ -141,7 +144,9 @@
     *   Read the nearest feature and copy its folders, names, imports, annotations, and Either or TaskEither type. If that code contradicts the rule, new code follows the rule.
     *   Create a directory only when a file is about to live there.
     *   Add an immutable domain entity with value equality (Equatable, or Freezed when the project uses it) and no Flutter, JSON, or HTTP types.
-    *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>.
+    *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream of entities.
+    *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, and replays the current user to new subscribers, a SignInUseCase that applies the business rule before saving the session, and an app-wide @lazySingleton SessionCubit that watches the session and signs out. The sign-in form does not navigate; the router redirect does.
+    *   Show a page that provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values.
     *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
     *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, or flutter-use-http-package for HTTP.
@@ -375,7 +380,7 @@
     The skill must tell the agent to:
     *   Define NetworkService in core/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
     *   Import http, dio, or any other client only in the NetworkService impl and its @module in core/di. The app never knows the client.
-    *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
+    *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService with the shared StorageKeys.accessToken key or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
     *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl.
     *   Keep the Android INTERNET permission and the macOS com.apple.security.network.client entitlement when those targets exist and the entries are missing.
     *   In the datasource, inject NetworkService, decode with fromJson, and map exceptions to Failure with the helper in core/errors. The helper takes the error and stack trace, so it is passed directly to TaskEither.tryCatch, and it keeps both in UnexpectedFailure. Failure types have value equality. Return Either or TaskEither. For DELETE, return Right(unit).
@@ -423,7 +428,7 @@
     Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc.
 
     The skill must tell the agent to:
-    *   Wrap packages that do I/O, call platform channels, or expose a vendor API. Do not wrap flutter_bloc, go_router, fpdart, injectable, get_it, equatable, meta, collection, intl, freezed_annotation, or json_annotation.
+    *   Wrap packages that do I/O, call platform channels, or expose a vendor API. Do not wrap flutter_bloc, go_router, fpdart, injectable, get_it, equatable, formz, meta, collection, intl, freezed_annotation, or json_annotation. Do not wrap envied; only AppConfig implementations in core/config import it.
     *   List only the operations the app needs. Reuse an existing core service for the package or capability, and never write a second wrapper.
     *   Create an interface named after the capability that uses app types only, and an impl that is the only file importing the SDK besides its @module in core/di.
     *   Catch SDK exceptions in the impl and throw app exceptions from core/errors. Add each new exception to the exception-to-Failure helper. Do not create a Failure in the service.
@@ -450,7 +455,7 @@
     *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context). An input never reads a BuildContext.
     *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, with value equality, not a sealed class or a Freezed union. Use Freezed only when the project already depends on it; otherwise extend Equatable and write copyWith by hand.
     *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, returns if the Cubit closed while waiting, and emits success or failure.
-    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
+    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
     *   Use initialValue and onChanged. Use a TextEditingController only when the Cubit must write the text. Allow setState only for local toggles such as password visibility.
     *   If the submit use case does not exist, ask before creating domain or data code.
     *   Test input validators, Cubit transitions with blocTest, and field widgets with plain values. Mock the use case with the project's mock library, or mocktail when there is none, and register a fallback value for its params type.

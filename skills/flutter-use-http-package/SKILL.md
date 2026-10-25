@@ -3,7 +3,7 @@ name: flutter-use-http-package
 description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
 ---
 # REST Calls Through NetworkService
 
@@ -118,7 +118,7 @@ class NetworkServiceImpl implements NetworkService {
   Future<Object?> _send(
     Future<http.Response> Function(Map<String, String> headers) request,
   ) async {
-    final token = await _storage.read('access_token');
+    final token = await _storage.read(StorageKeys.accessToken);
     final headers = {
       HttpHeaders.acceptHeader: 'application/json',
       HttpHeaders.contentTypeHeader: 'application/json; charset=UTF-8',
@@ -146,7 +146,7 @@ class NetworkServiceImpl implements NetworkService {
 }
 ```
 
-`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. Register `http.Client` in a module:
+`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. `StorageKeys` lives in `core/storage/storage_keys.dart`; the auth datasource writes the token with the same key. Register `http.Client` in a module:
 
 ```dart
 // core/di/network_module.dart

@@ -12,7 +12,7 @@ Use the flavor names the project already has. Do not create, rename, or remove a
 
 ## Flavor selection
 
-- Each entry point selects its flavor explicitly and passes it to the shared bootstrap in `app/`, which passes it to the DI setup as the `injectable` environment. Entry points contain no other startup code.
+- When the project has flavors, each entry point selects its flavor explicitly and passes it to the shared bootstrap in `app/`, which passes it to the DI setup as the `injectable` environment. Entry points contain no other startup code.
 - Never fall back to another flavor when a value or a flavor is missing. Never treat a missing or unknown flavor as production.
 - A production build never reads development or pre-production values.
 - A flavor has the same name in its entry point, its `injectable` environment, its `.env` file, the Android `productFlavors`, the iOS scheme and build configurations, and its `.vscode/launch.json` entry, which runs `--flavor <flavor>` with `lib/main_<flavor>.dart`.
@@ -42,4 +42,4 @@ Use the flavor names the project already has. Do not create, rename, or remove a
 
 ## Done
 
-The change is done when each entry point selects its flavor explicitly, config comes from `AppConfig`, no code outside `core/config/` reads an `Env` class or branches on the flavor, `.env` files and generated env files are ignored with an `.example` committed, and no secret is compiled into the app. State which flavors were built or run, and which could not be.
+The change is done when each flavor's entry point selects it explicitly, config comes from `AppConfig`, no code outside `core/config/` reads an `Env` class or branches on the flavor, `.env` files and generated env files are ignored with an `.example` committed, and no secret is compiled into the app. State which flavors were built or run, and which could not be.
