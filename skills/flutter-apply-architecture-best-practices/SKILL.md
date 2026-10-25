@@ -3,7 +3,7 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
 ---
 # Adding a Flutter Feature
 
@@ -17,18 +17,18 @@ Read the nearest feature first and copy its folders, names, imports, annotations
 
 Copy this checklist and complete it in order.
 
-- [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/`. No Flutter, JSON, or HTTP types.
+- [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/` with value equality (`Equatable`, or Freezed when the project uses it). No Flutter, JSON, or HTTP types.
 - [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`.
 - [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). Skip the use case only when the operation forwards a single repository call and adds no rule.
 - [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
 - [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
 - [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
 - [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
-- [ ] **8. Cubit.** Add a `sealed` state and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight.
+- [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the `await`.
 - [ ] **9. UI.** Add a page under `presentation/pages/` that provides the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view from `presentation/widgets/`. The view receives state and callbacks. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
 - [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, and `@injectable` for use cases and Cubits. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
 - [ ] **11. Route.** Add the page to the existing GoRouter table.
-- [ ] **12. Tests.** Test the datasource with a mocked core service, and test the use case and the Cubit transitions when the behavior can fail or branch. Use the mock library already in the project.
+- [ ] **12. Tests.** Test the datasource with a mocked core service, and test the use case and the Cubit transitions when the behavior can fail or branch. Use the mock library already in the project; when there is none, add `mocktail` and `bloc_test` as dev dependencies. Test Cubits with `blocTest`.
 - [ ] **13. Checks.** Run the formatter, `dart analyze`, and the relevant tests. Report which commands ran.
 
 ## Where code goes
@@ -50,7 +50,7 @@ lib/features/<feature>/
     └── widgets/
 ```
 
-Injection setup and SDK modules go in `core/di/`. Exceptions, failures, and the exception-to-`Failure` helper go in `core/errors/`. `NetworkService` goes in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
+The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, failures, and the exception-to-`Failure` helper go in `core/errors/`. `NetworkService` goes in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
 
 Move feature code into `core/` only when two features already use it.
 
@@ -71,7 +71,7 @@ class AuthRemoteDataSource {
           final json = await _network.post('/auth/login', body: request.toJson());
           return UserModel.fromJson(json as Map<String, dynamic>);
         },
-        (error, _) => mapToFailure(error),
+        mapToFailure,
       );
 }
 ```
@@ -106,10 +106,7 @@ class SignInUseCase {
   final AuthRepository _repository;
 
   TaskEither<Failure, User> call(SignInParams params) => _repository
-      .signIn(
-        email: params.email.trim().toLowerCase(),
-        password: params.password,
-      )
+      .signIn(email: params.email, password: params.password)
       .flatMap(
         (user) => user.isEmailVerified
             ? TaskEither.right(user)
@@ -123,8 +120,11 @@ The sign-in screen has input fields, so its Cubit is the form Cubit in `flutter-
 A screen that loads data or performs one action uses a sealed state. For a profile screen backed by a `GetProfileUseCase` that returns `TaskEither<Failure, User>`:
 
 ```dart
-sealed class ProfileState {
+sealed class ProfileState extends Equatable {
   const ProfileState();
+
+  @override
+  List<Object?> get props => [];
 }
 
 class ProfileInitial extends ProfileState {
@@ -138,11 +138,17 @@ class ProfileLoading extends ProfileState {
 class ProfileLoaded extends ProfileState {
   const ProfileLoaded(this.user);
   final User user;
+
+  @override
+  List<Object?> get props => [user];
 }
 
 class ProfileFailure extends ProfileState {
   const ProfileFailure(this.failure);
   final Failure failure;
+
+  @override
+  List<Object?> get props => [failure];
 }
 
 @injectable
@@ -155,6 +161,7 @@ class ProfileCubit extends Cubit<ProfileState> {
     if (state is ProfileLoading) return;
     emit(const ProfileLoading());
     final result = await _getProfileUseCase().run();
+    if (isClosed) return;
     result.fold(
       (failure) => emit(ProfileFailure(failure)),
       (user) => emit(ProfileLoaded(user)),

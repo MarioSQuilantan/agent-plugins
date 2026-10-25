@@ -3,7 +3,7 @@ name: flutter-use-http-package
 description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
 ---
 # REST Calls Through NetworkService
 
@@ -60,16 +60,18 @@ class NetworkException implements Exception {
 
 ```dart
 // core/errors/map_to_failure.dart
-Failure mapToFailure(Object error) => switch (error) {
+Failure mapToFailure(Object error, StackTrace stackTrace) => switch (error) {
       UnauthorizedException() => const UnauthorizedFailure(),
       ServerException(:final statusCode) => ServerFailure(statusCode: statusCode),
       NetworkException() => const NetworkFailure(),
       FormatException() || TypeError() => const SerializationFailure(),
-      _ => const UnexpectedFailure(),
+      _ => UnexpectedFailure(error: error, stackTrace: stackTrace),
     };
 ```
 
-Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none.
+The signature matches `TaskEither.tryCatch`, so datasources pass `mapToFailure` directly. When the project has a logger or crash reporter, report the unexpected case there before returning `UnexpectedFailure`.
+
+Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none, with value equality (`Equatable`, or Freezed when the project uses it).
 
 ## Impl with `http`
 
@@ -96,12 +98,12 @@ class NetworkServiceImpl implements NetworkService {
 
   @override
   Future<Object?> post(String path, {Object? body}) => _send(
-        (headers) => _client.post(_uri(path), headers: headers, body: jsonEncode(body)),
+        (headers) => _client.post(_uri(path), headers: headers, body: _encode(body)),
       );
 
   @override
   Future<Object?> put(String path, {Object? body}) => _send(
-        (headers) => _client.put(_uri(path), headers: headers, body: jsonEncode(body)),
+        (headers) => _client.put(_uri(path), headers: headers, body: _encode(body)),
       );
 
   @override
@@ -110,6 +112,8 @@ class NetworkServiceImpl implements NetworkService {
 
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse('${_config.baseUrl}$path').replace(queryParameters: query);
+
+  String? _encode(Object? body) => body == null ? null : jsonEncode(body);
 
   Future<Object?> _send(
     Future<http.Response> Function(Map<String, String> headers) request,
@@ -142,7 +146,7 @@ class NetworkServiceImpl implements NetworkService {
 }
 ```
 
-`NetworkConfig` is the project's environment config (base URL, timeout). Register `http.Client` in a module:
+`NetworkConfig` is the project's environment config in `core/config/` (base URL, timeout). Register `http.Client` in a module:
 
 ```dart
 // core/di/network_module.dart
@@ -175,7 +179,7 @@ class ProductsRemoteDataSource {
               .map(ProductModel.fromJson)
               .toList();
         },
-        (error, _) => mapToFailure(error),
+        mapToFailure,
       );
 
   TaskEither<Failure, ProductModel> createProduct(CreateProductRequest request) =>
@@ -184,7 +188,7 @@ class ProductsRemoteDataSource {
           final json = await _network.post('/products', body: request.toJson());
           return ProductModel.fromJson(json as Map<String, dynamic>);
         },
-        (error, _) => mapToFailure(error),
+        mapToFailure,
       );
 
   TaskEither<Failure, Unit> deleteProduct(String id) => TaskEither.tryCatch(
@@ -192,7 +196,7 @@ class ProductsRemoteDataSource {
           await _network.delete('/products/$id');
           return unit;
         },
-        (error, _) => mapToFailure(error),
+        mapToFailure,
       );
 }
 ```

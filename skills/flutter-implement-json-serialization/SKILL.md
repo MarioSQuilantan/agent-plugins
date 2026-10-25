@@ -3,7 +3,7 @@ name: flutter-implement-json-serialization
 description: Map JSON with dart:convert on data-layer models that expose fromJson, toJson, and toEntity. Use when adding or changing API models. Keep domain entities free of JSON.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
 ---
 # JSON Models in the Data Layer
 
@@ -26,7 +26,7 @@ Use manual mapping. Do not add `json_serializable` or Freezed for this task unle
 ## Workflow
 
 - [ ] Create `data/models/<name>_model.dart` with `final` fields, `fromJson`, `toJson`, and `toEntity()`.
-- [ ] Create or reuse the domain entity. Do not add JSON to it.
+- [ ] Create or reuse the domain entity with value equality (`Equatable`, or Freezed when the project uses it). Do not add JSON to it.
 - [ ] Add `data/requests/<name>_request.dart` only when the call sends a body that is not the response model.
 - [ ] Call `NetworkService` in the datasource, pass the decoded value to `fromJson`, and return `Either` or `TaskEither`.
 - [ ] Add a unit test for `fromJson`, `toJson`, and `toEntity`, including a payload that is missing a required field.
@@ -37,12 +37,15 @@ Use manual mapping. Do not add `json_serializable` or Freezed for this task unle
 Response model and entity:
 
 ```dart
-class User {
+class User extends Equatable {
   const User({required this.id, required this.name, required this.email});
 
   final int id;
   final String name;
   final String email;
+
+  @override
+  List<Object?> get props => [id, name, email];
 }
 
 class UserModel {
@@ -86,7 +89,7 @@ TaskEither<Failure, UserModel> fetchUser(int id) => TaskEither.tryCatch(
         final json = await _network.get('/users/$id') as Map<String, dynamic>;
         return UserModel.fromJson(json);
       },
-      (error, _) => mapToFailure(error),
+      mapToFailure,
     );
 ```
 
@@ -101,7 +104,7 @@ TaskEither<Failure, List<UserModel>> fetchUsers() => TaskEither.tryCatch(
         final json = await _network.get('/users') as List<dynamic>;
         return compute(parseUsers, json);
       },
-      (error, _) => mapToFailure(error),
+      mapToFailure,
     );
 ```
 

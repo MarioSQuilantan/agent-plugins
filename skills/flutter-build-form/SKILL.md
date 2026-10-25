@@ -3,7 +3,7 @@ name: flutter-build-form
 description: Builds a Flutter form with formz inputs, a Cubit, and stateless field widgets, wired to an existing use case. Use when adding a form, adding fields to a form, or changing form validation.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 18:20:00 GMT
+  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
 ---
 # Building a Form
 
@@ -34,13 +34,13 @@ submit: SignInUseCase
 - [ ] **1. Package.** Add `formz` only when `pubspec.yaml` does not already depend on it.
 - [ ] **2. Siblings.** Read existing forms, form Cubits, and inputs. Copy their names, folders, error-text style, and state equality. Reuse `core/forms/inputs/` before creating an input.
 - [ ] **3. Inputs.** Create one `FormzInput<T, E>` per missing field with an error enum and a `validator`. Put it in `presentation/inputs/` when only this feature uses it, or in `core/forms/inputs/` when a second feature needs it. Field validation (required, format, length) lives only here.
-- [ ] **4. Error text.** Add an extension on each error enum that returns the message. Use the project's localizations when they exist.
-- [ ] **5. State.** One class with the inputs, `FormzMixin`, a `FormzSubmissionStatus`, and the last `Failure`. Not a sealed class and not a Freezed union. Write it with Freezed when `pubspec.yaml` already depends on `freezed`; otherwise write `copyWith` by hand and extend `Equatable` when the project uses it. Do not add Freezed for a form.
-- [ ] **6. Cubit.** One method per field change, plus `submit`. `submit` marks every input dirty, stops when `Formz.validate` fails, ignores a call while in progress, sets `inProgress`, runs the use case, and emits `success` or `failure`.
+- [ ] **4. Error text.** Add an extension on each error enum that returns the message. When the project has localizations, the extension takes them as a parameter (`String text(AppLocalizations l10n)`) and the form widget passes `AppLocalizations.of(context)`. An input never reads a `BuildContext`.
+- [ ] **5. State.** One class with the inputs, `FormzMixin`, a `FormzSubmissionStatus`, and the last `Failure`, with value equality. Not a sealed class and not a Freezed union. Write it with Freezed when `pubspec.yaml` already depends on `freezed`; otherwise extend `Equatable` and write `copyWith` by hand. Do not add Freezed for a form.
+- [ ] **6. Cubit.** One method per field change, plus `submit`. `submit` marks every input dirty, stops when `Formz.validate` fails, ignores a call while in progress, sets `inProgress`, runs the use case, returns if the Cubit closed while waiting, and emits `success` or `failure`.
 - [ ] **7. Page.** Provide the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and react to `status` in a `BlocListener` (snackbar, navigation).
 - [ ] **8. Form and fields.** The form widget reads the Cubit and passes values, errors, and callbacks to stateless field widgets. Rebuild each field with its own `BlocSelector` so a keystroke does not rebuild the whole form.
 - [ ] **9. Register.** Annotate the Cubit like its siblings, `@injectable` by default. Regenerate the injection config with the project's `build_runner` command.
-- [ ] **10. Tests.** Test each input's `validator`, the Cubit transitions (invalid submit, in progress, success, failure), and the field widgets with plain values. Use the project's mock library for the use case.
+- [ ] **10. Tests.** Test each input's `validator`, the Cubit transitions with `blocTest` (invalid submit, in progress, success, failure), and the field widgets with plain values. Mock the use case with the project's mock library, or `mocktail` when there is none, and register a fallback value for its params type.
 - [ ] **11. Checks.** Run the formatter and `dart analyze` on the touched files. Report which commands ran.
 
 When adding a field to an existing form, extend the state, the Cubit, and the form widget, and add only the new input.
@@ -118,10 +118,21 @@ extension PasswordValidationErrorText on PasswordValidationError {
 }
 ```
 
+With localizations, the extension takes them as a parameter, and the form calls `email.displayError?.text(AppLocalizations.of(context))`:
+
+```dart
+extension EmailValidationErrorText on EmailValidationError {
+  String text(AppLocalizations l10n) => switch (this) {
+        EmailValidationError.empty => l10n.fieldRequired,
+        EmailValidationError.invalid => l10n.invalidEmail,
+      };
+}
+```
+
 State written by hand, for a project without Freezed:
 
 ```dart
-class LoginState with FormzMixin {
+class LoginState extends Equatable with FormzMixin {
   const LoginState({
     this.email = const Email.pure(),
     this.password = const Password.pure(),
@@ -136,6 +147,9 @@ class LoginState with FormzMixin {
 
   @override
   List<FormzInput<dynamic, dynamic>> get inputs => [email, password];
+
+  @override
+  List<Object?> get props => [email, password, status, failure];
 
   // `failure` is not carried over: every copy clears it unless a new one is passed.
   LoginState copyWith({
@@ -201,6 +215,7 @@ class LoginCubit extends Cubit<LoginState> {
     final result = await _signInUseCase(
       SignInParams(email: email.value, password: password.value),
     ).run();
+    if (isClosed) return;
     result.fold(
       (failure) => emit(
         state.copyWith(status: FormzSubmissionStatus.failure, failure: failure),
@@ -229,7 +244,7 @@ class LoginPage extends StatelessWidget {
               const SnackBar(content: Text('Sign in failed')),
             );
           }
-          if (state.status.isSuccess) context.go('/home');
+          if (state.status.isSuccess) context.go('/');
         },
         child: const Scaffold(body: LoginForm()),
       ),
@@ -264,7 +279,10 @@ class LoginForm extends StatelessWidget {
           builder: (context, status) => ElevatedButton(
             onPressed: status.isInProgressOrSuccess ? null : cubit.submit,
             child: status.isInProgress
-                ? const CircularProgressIndicator()
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
                 : const Text('Login'),
           ),
         ),
@@ -319,6 +337,46 @@ class _PasswordFieldState extends State<PasswordField> {
       onChanged: widget.onChanged,
     );
   }
+}
+```
+
+Cubit test with `mocktail` and `bloc_test`:
+
+```dart
+class MockSignInUseCase extends Mock implements SignInUseCase {}
+
+void main() {
+  late MockSignInUseCase signInUseCase;
+  const email = Email.dirty('ana@example.com');
+  const password = Password.dirty('secret123');
+
+  setUpAll(() {
+    registerFallbackValue(const SignInParams(email: '', password: ''));
+  });
+
+  setUp(() => signInUseCase = MockSignInUseCase());
+
+  blocTest<LoginCubit, LoginState>(
+    'emits inProgress then failure when sign in fails',
+    setUp: () => when(() => signInUseCase(any()))
+        .thenReturn(TaskEither.left(const NetworkFailure())),
+    build: () => LoginCubit(signInUseCase),
+    seed: () => const LoginState(email: email, password: password),
+    act: (cubit) => cubit.submit(),
+    expect: () => const [
+      LoginState(
+        email: email,
+        password: password,
+        status: FormzSubmissionStatus.inProgress,
+      ),
+      LoginState(
+        email: email,
+        password: password,
+        status: FormzSubmissionStatus.failure,
+        failure: NetworkFailure(),
+      ),
+    ],
+  );
 }
 ```
 

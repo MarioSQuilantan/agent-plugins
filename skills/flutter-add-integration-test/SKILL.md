@@ -3,7 +3,7 @@ name: flutter-add-integration-test
 description: Configures Flutter Driver for app interaction and converts MCP actions into permanent integration tests. Use when adding integration testing to a project, exploring UI components via MCP, or automating user flows with the integration_test package.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 18:29:20 GMT
+  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
 ---
 # Implementing Flutter Integration Tests
 
@@ -47,6 +47,7 @@ Structure integration tests using the `flutter_test` API paradigm.
 - Name all test files using the `<name>_test.dart` convention.
 - Initialize the binding by calling `IntegrationTestWidgetsFlutterBinding.ensureInitialized();` at the start of `main()`.
 - Load the application UI using `await tester.pumpWidget(MyApp());`.
+- If the app uses `get_it` and `injectable`, call the project's DI setup (for example `configureDependencies()`) before `pumpWidget`, and reset it with `await getIt.reset()` in `tearDown` when several tests set it up. Register fakes for core services such as `NetworkService` when the test must not reach the real backend.
 - Trigger frames and wait for animations to complete using `await tester.pumpAndSettle();` after interactions like `tester.tap()`.
 - Assert widget visibility using `expect(find.byKey(ValueKey('foo')), findsOneWidget);` or `findsNothing`.
 - Scroll to specific off-screen widgets using `await tester.scrollUntilVisible(itemFinder, 500.0, scrollable: listFinder);`.
@@ -96,6 +97,7 @@ Copy and follow this checklist to implement and verify integration tests.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:my_app/core/di/injection.dart';
 import 'package:my_app/main.dart';
 
 void main() {
@@ -103,6 +105,10 @@ void main() {
 
   group('End-to-end test', () {
     testWidgets('tap on the floating action button, verify counter', (tester) async {
+      // Register dependencies when the app uses get_it and injectable.
+      // Await the call when the project's setup is async.
+      configureDependencies();
+
       // Load app widget.
       await tester.pumpWidget(const MyApp());
 

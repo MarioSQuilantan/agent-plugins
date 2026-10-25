@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Flutter Architecture
 
-This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, and `flutter-build-form` is the workflow for a form. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, and `flutter-build-form` is the workflow for a form. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
 
 Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter. Forms use `formz`; add it only when the project gets its first form.
 
@@ -18,7 +18,10 @@ Make the smallest change that satisfies the request. Do not refactor unrelated c
 
 ```text
 lib/
+├── app/
+│   └── router/
 ├── core/
+│   ├── config/
 │   ├── di/
 │   ├── errors/
 │   ├── forms/
@@ -55,6 +58,8 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `presentation/cubit`: `Cubit<State>` and its state. No event classes.
 - `presentation/inputs`: `FormzInput` classes used only by this feature.
 - `presentation/pages` and `presentation/widgets`: rendering and user input.
+- `app`: the root widget and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
+- `core/config`: environment config (base URL, timeouts, flavor values).
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
 - `core/forms`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
@@ -78,7 +83,7 @@ Architecture and pure-Dart utility packages are imported where their layer allow
 
 ## Dependency direction
 
-The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into a sealed state. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
+The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
 
 Domain imports neither `data/` nor `presentation/`, and it does not import Flutter.
 
@@ -94,8 +99,9 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 
 - Expose methods for user actions (`load`, `signIn`, `submit`).
 - Emit immutable states. Prefer a `sealed class` with `initial`, `loading`, `loaded`, and `failure` when those phases differ. A form is the exception: it uses one state class with its `FormzInput` fields, `FormzMixin`, and a `FormzSubmissionStatus`, so field values survive loading and failure. Write that class with Freezed when the project uses Freezed, and by hand otherwise. Never use a Freezed union for a form.
-- Use Freezed only when the project already depends on it and the state needs union types, value equality, or `copyWith`. Do not add Freezed to a project that does not use it; write `copyWith` by hand and use `Equatable` when the project uses it.
+- States, entities, and `Failure` types have value equality so Cubit tests can compare them. Use Freezed only when the project already depends on it. Otherwise extend `Equatable`, adding `equatable` when the project has neither, and write `copyWith` by hand. Do not add Freezed to a project that does not use it.
 - Handle loading, success, and failure. Ignore a repeated submit while a request is in flight when a double submit would matter.
+- After an `await`, return when `isClosed` is true before calling `emit`.
 - A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view.
 - Trigger navigation, dialogs, and snackbars from a `BlocListener`, never from `build()`.
 - `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: focus, animations, and local toggles such as showing a password.
@@ -103,7 +109,7 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 
 ## Errors
 
-The datasource is the only place that creates a `Failure`. It calls the core service, decodes with `fromJson`, and maps any exception with the project's helper in `core/errors/` (shown as `mapToFailure` in the skills). If no helper exists, create one there once and reuse it. Do not write a mapping function per feature.
+The datasource is the only place that creates a `Failure`. It calls the core service, decodes with `fromJson`, and maps any exception with the project's helper in `core/errors/` (shown as `mapToFailure` in the skills). If no helper exists, create one there once and reuse it. Do not write a mapping function per feature. The helper keeps the error and stack trace of an unexpected exception in `UnexpectedFailure` and reports it through the project's logger or crash reporter when one exists, so programming errors are not hidden.
 
 The repository does not catch exceptions. It converts the model to an entity (`.map((model) => model.toEntity())`) and may combine datasources or cache.
 
@@ -118,20 +124,25 @@ Copy the annotation from the nearest registration. When no sample exists, use:
 - `@LazySingleton(as: ServiceInterface)` for a core service impl.
 - `@lazySingleton` for a datasource, with no contract. Add a datasource contract only when there are two implementations (remote and local, or one per flavor with `@Environment`) or sibling datasources already have contracts.
 - `@LazySingleton(as: RepositoryContract)` for a repository implementation.
-- `@injectable` for use cases and Cubits.
+- `@injectable` for use cases and screen Cubits.
+- `@lazySingleton` for an app-wide Cubit, such as the session, that the router or several pages read. Provide it once above `MaterialApp.router` with `BlocProvider.value`.
 - A `@lazySingleton` getter in a `@module` under `core/di/` for an SDK instance.
 
 Regenerate the injection config with the project's existing `build_runner` command when registrations change. Integration tests call the project's DI setup (for example `configureDependencies()`) before `pumpWidget`. Do not add another DI library.
 
 ## Navigation, imports, and safety
 
-Use the project's GoRouter setup. Add routes beside the existing route table. Do not add another navigation package.
+Use the project's GoRouter setup. Add routes beside the existing route table in `app/router/`. Do not add another navigation package. A redirect reads app-wide Cubits, not services, and refreshes through a `Listenable` adapter over the Cubit stream; that adapter is the one allowed `ChangeNotifier` because it is not feature state.
 
 Match the import style of the file you are editing. Do not mix a new `package:` import style into a feature that uses relative imports, or the reverse.
 
 Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` and the entry page only; it never exports `data/`.
 
 Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. If flavors or `envied` are already configured, use them. Do not add an environment system as part of an unrelated change.
+
+## Tests
+
+Use the project's mock library. When the project has none, add `mocktail` and `bloc_test` as dev dependencies. Mock the dependency one layer down: the core service for a datasource, the repository contract for a use case, and the use case for a Cubit. Test Cubits with `blocTest`. Register a fallback value in `setUpAll` for each custom argument type used with `any()`.
 
 ## Reuse and scope
 
