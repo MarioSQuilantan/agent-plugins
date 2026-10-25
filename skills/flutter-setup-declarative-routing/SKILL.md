@@ -3,7 +3,7 @@ name: flutter-setup-declarative-routing
 description: Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:40:00 GMT
 ---
 # Implementing Routing and Deep Linking
 
@@ -148,7 +148,7 @@ class AppRouter {
 }
 ```
 
-The redirect keeps a deep link: a signed-out user who opens `/orders/42` signs in and returns there. `_safeReturn` accepts only an in-app path, so a crafted `from` cannot send the user to another site. `bootstrap` restores the session before `runApp`, so a signed-in user never sees `/login` at startup.
+The redirect keeps a deep link: a signed-out user who opens `/orders/42` signs in and returns there. `_safeReturn` accepts only an in-app path, so a crafted `from` cannot send the user to another site. The redirect reads query parameters from `state.uri`, which requires go_router 13.2.0 or later; on an older version, upgrade go_router or redirect to `/login` without `from`. `bootstrap` restores the session before `runApp`, so a signed-in user never sees `/login` at startup.
 
 ```dart
 // lib/app/app.dart

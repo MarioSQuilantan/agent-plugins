@@ -127,7 +127,7 @@ Use the result type of the nearest feature (`Either` or `TaskEither`). Do not th
 
 ## Dependency injection
 
-Register dependencies with `injectable` and resolve them through the project's `getIt` from `core/di/`. Constructor injection only. Do not resolve `getIt` inside a service, datasource, repository, use case, or Cubit. Never call `GetIt.I.register*` by hand in app code; only an integration test may replace a registration with a fake after the DI setup runs.
+Register dependencies with `injectable` and resolve them through the project's `getIt` from `core/di/`. Constructor injection only. Do not resolve `getIt` inside a service, datasource, repository, use case, or Cubit. Never call `GetIt.I.register*` by hand in app code; only an integration test may register a fake, in a scope pushed with `getIt.pushNewScope` after the DI setup runs.
 
 Copy the annotation from the nearest registration. When no sample exists, use:
 

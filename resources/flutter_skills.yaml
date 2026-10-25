@@ -38,7 +38,7 @@
         * For scrolling, `integration_test` allows using `tester.scrollUntilVisible` to scroll to a specific item.
         * When working with `flutter_driver` (for migration or specific scenarios), `waitFor` is used to locate widgets, and `waitForAbsent` to ensure a widget is not present. `flutter_driver` also uses `driver.tap` for interactions and `driver.scroll` for scrolling.
         * Add `Key` parameters to widgets, such as `ValueKey('increment')`, to allow finding specific widgets within the test suite.
-        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and, when the test must not reach the real backend, replace a core service such as `NetworkService` with a fake through `getIt.unregister` and `getIt.registerSingleton` after the DI setup runs. That is the only place where code registers a dependency by hand.
+        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and, when the test must not reach the real backend, register a fake for a core service such as `NetworkService` in a test scope with `getIt.pushNewScope` after the DI setup runs, so it shadows the real registration. That is the only place where code registers a dependency by hand.
 
     5. **Running Integration Tests:**
         * Integration tests can be run on a physical device or emulator using the `flutter drive` command.
@@ -246,7 +246,7 @@
         *   Refresh redirects with `refreshListenable` and a small `Listenable` adapter over the Cubit stream. That adapter is the one allowed `ChangeNotifier`, because it holds no feature state.
         *   Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
         *   The root `App` in `app/app.dart` is the one place that registers the theme from `core/theme/`, the localizations when the project has them, and `routerConfig`.
-        *   When redirecting a signed-out user to `/login`, keep the requested location in a `from` query parameter, and after sign-in return to it only when it is an in-app path.
+        *   When redirecting a signed-out user to `/login`, keep the requested location in a `from` query parameter, and after sign-in return to it only when it is an in-app path. Reading query parameters from `state.uri` in the redirect requires go_router 13.2.0 or later.
   resources:
     - https://docs.flutter.dev/cookbook/animation/page-route-animation
     - https://docs.flutter.dev/cookbook/effects/nested-nav
