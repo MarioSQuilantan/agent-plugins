@@ -490,3 +490,26 @@
     - https://docs.flutter.dev/deployment/flavors-ios
     - https://pub.dev/packages/envied
     - https://pub.dev/packages/injectable
+- name: flutter-apply-responsive-text
+  description: Applies the project's typography and keeps text readable in
+    constrained space by choosing between wrapping, maxLines with ellipsis, and
+    bounded shrinking. Use when creating or changing text widgets, fixing text
+    overflow, adding typography styles, or adapting text to screen size and
+    text scaling.
+  examplePrompt: "Make the product card title fit two lines without overflowing"
+  instructions: |
+    Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc. Typography and text helpers live in core/theme.
+
+    The skill must tell the agent to:
+    *   Inspect core/theme and the nearest feature for the project's text styles (TextTheme, ThemeExtension, or a BuildContext extension) and any fit helper such as a .responsive() extension, and reuse them. Never hardcode font size, weight, or color in a feature widget.
+    *   Pick the style by the text's role, and add a style only in core/theme when the design needs one that does not exist.
+    *   Fix constraints first: Expanded or Flexible in a Row, a bounded width before any fit behavior. Refer to flutter-fix-layout-issues and flutter-build-responsive-layout for layout errors.
+    *   Choose one behavior: wrap paragraphs; maxLines with ellipsis for dynamic values; bounded shrinking only for short labels that must stay whole and short headings. Never shrink below the caption size or 12 logical pixels, and never fix the text scaler.
+    *   When the project has no typography, define a TextTheme in core/theme and register it in ThemeData; a BuildContext extension may map short names to that theme.
+    *   Add a fit helper only when shrinking is requested and none exists. With auto_size_text, pass every relevant Text property through (including overflow and key), return Text.rich unchanged, keep a readable minFontSize, and align FittedBox to the start.
+    *   Report known limits of an existing helper and change shared code only when the request allows it.
+    *   Test with a long value, a narrow width, and TextScaler.linear(2), and add a large textScaleFactor preview when the widget has previews.
+  resources:
+    - https://docs.flutter.dev/ui/design/text/typography
+    - https://api.flutter.dev/flutter/material/TextTheme-class.html
+    - https://pub.dev/packages/auto_size_text

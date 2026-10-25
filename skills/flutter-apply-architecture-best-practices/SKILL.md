@@ -3,7 +3,7 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:20:00 GMT
 ---
 # Adding a Flutter Feature
 
@@ -52,7 +52,7 @@ lib/features/<feature>/
     └── widgets/
 ```
 
-The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
+The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`. Theme, typography, and text helpers go in `core/theme/` (`flutter-apply-responsive-text`).
 
 Move feature code into `core/` only when two features already use it.
 
