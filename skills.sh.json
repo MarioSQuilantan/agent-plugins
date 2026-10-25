@@ -12,9 +12,10 @@
     },
     {
       "title": "Architecture & Data",
-      "description": "Layered app architecture, declarative routing, HTTP networking, and JSON serialization.",
+      "description": "Feature-first architecture, core services, GoRouter, NetworkService, and JSON models.",
       "skills": [
         "flutter-apply-architecture-best-practices",
+        "flutter-wrap-package-service",
         "flutter-setup-declarative-routing",
         "flutter-use-http-package",
         "flutter-implement-json-serialization"

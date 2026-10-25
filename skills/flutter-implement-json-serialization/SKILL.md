@@ -1,153 +1,108 @@
 ---
 name: flutter-implement-json-serialization
-description: Create model classes with `fromJson` and `toJson` methods using `dart:convert`. Use when manually mapping JSON keys to class properties for simple data structures.
+description: Map JSON with dart:convert on data-layer models that expose fromJson, toJson, and toEntity. Use when adding or changing API models. Keep domain entities free of JSON.
 metadata:
-  model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 21:44:50 GMT
+  model: manual
+  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
 ---
-# Serializing JSON Manually in Flutter
+# JSON Models in the Data Layer
 
-## Contents
-- [Core Guidelines](#core-guidelines)
-- [Workflow: Implementing a Serializable Model](#workflow-implementing-a-serializable-model)
-- [Workflow: Fetching and Parsing JSON](#workflow-fetching-and-parsing-json)
-- [Examples](#examples)
+Put `fromJson` and `toJson` on a class in `features/<feature>/data/models/`. The domain entity in `domain/entities/` has no JSON methods and does not import `dart:convert`. Connect them with `toEntity()`.
 
-## Core Guidelines
+Use manual mapping. Do not add `json_serializable` or Freezed for this task unless the feature already uses that generator.
 
-- **Import `dart:convert`**: Utilize Flutter's built-in `dart:convert` library for manual JSON encoding (`jsonEncode`) and decoding (`jsonDecode`).
-- **Enforce Type Safety**: Always cast the `dynamic` result of `jsonDecode()` to the expected type, typically `Map<String, dynamic>` for objects or `List<dynamic>` for arrays.
-- **Encapsulate Serialization Logic**: Define plain model classes containing properties corresponding to the JSON structure. Implement a `fromJson` factory constructor and a `toJson` method within the model.
-- **Handle Background Parsing**: If parsing large JSON documents (execution time > 16ms), offload the parsing logic to a separate isolate using Flutter's `compute()` function to prevent UI jank.
-- **Throw Exceptions on Failure**: When handling HTTP responses, throw an exception if the status code is not successful (e.g., not 200 OK or 201 Created). Do not return `null`.
+`NetworkService` already decodes the response body, so a datasource receives a `Map` or a `List`, not a string. Encoding and decoding raw strings happens only inside the network impl.
 
-## Workflow: Implementing a Serializable Model
+## Rules
 
-Use this checklist to implement manual JSON serialization for a data model.
+- Cast the decoded value before reading fields. An object is `Map<String, dynamic>`. A list is `List<dynamic>` cast to `List<Map<String, dynamic>>`.
+- Prefer a `switch` pattern for a single object so a missing or mistyped field fails in `fromJson`.
+- Name the data class with a `Model` suffix (`UserModel`) and the entity without it (`User`).
+- Keep API key names inside the model. The entity uses the app's field names.
+- Put an outbound body in `data/requests/` with `toJson`. Do not put that request type in the domain.
+- Map a long list off the UI isolate with `compute()` when mapping causes jank. The function passed to `compute()` must be top-level or static.
+- `fromJson` may throw `FormatException`, and a wrong cast throws `TypeError`. The datasource maps both to a `Failure` with the helper in `core/errors/`. The repository and the Cubit never see the exception.
 
-**Task Progress:**
-- [ ] Define the plain model class with `final` properties.
-- [ ] Implement the `factory Model.fromJson(Map<String, dynamic> json)` constructor.
-- [ ] Implement the `Map<String, dynamic> toJson()` method.
-- [ ] Write unit tests for both serialization methods.
-- [ ] Run validator -> review type mismatch errors -> fix casting logic.
+## Workflow
 
-1. **Define the Model**: Create a class with properties matching the JSON keys.
-2. **Implement `fromJson`**: Extract values from the `Map` and cast them to the appropriate Dart types. Use pattern matching or explicit casting.
-3. **Implement `toJson`**: Return a `Map<String, dynamic>` mapping the class properties back to their JSON string keys.
-4. **Validate**: Execute unit tests to ensure type safety, autocompletion, and compile-time exception handling function correctly.
-
-## Workflow: Fetching and Parsing JSON
-
-Use this conditional workflow when retrieving and parsing JSON from a network request.
-
-**Task Progress:**
-- [ ] Execute the HTTP request.
-- [ ] Validate the response status code.
-- [ ] Determine parsing strategy (Synchronous vs. Isolate).
-- [ ] Decode and map the JSON to the model.
-
-1. **Execute Request**: Use the `http` package to perform the network call.
-2. **Validate Response**: 
-   - If `response.statusCode == 200` (or 201 for POST), proceed to parsing.
-   - If the status code indicates failure, throw an `Exception`.
-3. **Determine Parsing Strategy**:
-   - If parsing a **small payload** (e.g., a single object), parse synchronously on the main thread.
-   - If parsing a **large payload** (e.g., an array of thousands of objects), use `compute(parseFunction, response.body)` to parse in a background isolate.
-4. **Decode and Map**: Pass the decoded JSON to your model's `fromJson` constructor.
+- [ ] Create `data/models/<name>_model.dart` with `final` fields, `fromJson`, `toJson`, and `toEntity()`.
+- [ ] Create or reuse the domain entity. Do not add JSON to it.
+- [ ] Add `data/requests/<name>_request.dart` only when the call sends a body that is not the response model.
+- [ ] Call `NetworkService` in the datasource, pass the decoded value to `fromJson`, and return `Either` or `TaskEither`.
+- [ ] Add a unit test for `fromJson`, `toJson`, and `toEntity`, including a payload that is missing a required field.
+- [ ] Run the formatter and `dart analyze`.
 
 ## Examples
 
-### High-Fidelity Model Implementation
+Response model and entity:
 
 ```dart
-import 'dart:convert';
-
 class User {
+  const User({required this.id, required this.name, required this.email});
+
+  final int id;
+  final String name;
+  final String email;
+}
+
+class UserModel {
+  const UserModel({required this.id, required this.name, required this.email});
+
   final int id;
   final String name;
   final String email;
 
-  const User({
-    required this.id,
-    required this.name,
-    required this.email,
-  });
-
-  // Factory constructor for deserialization
-  factory User.fromJson(Map<String, dynamic> json) {
+  factory UserModel.fromJson(Map<String, dynamic> json) {
     return switch (json) {
-      {
-        'id': int id,
-        'name': String name,
-        'email': String email,
-      } => 
-        User(
-          id: id,
-          name: name,
-          email: email,
-        ),
-      _ => throw const FormatException('Failed to load User.'),
+      {'id': final int id, 'name': final String name, 'email': final String email} =>
+        UserModel(id: id, name: name, email: email),
+      _ => throw const FormatException('Failed to read UserModel.'),
     };
   }
 
-  // Method for serialization
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'email': email,
-    };
-  }
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'email': email};
+
+  User toEntity() => User(id: id, name: name, email: email);
 }
 ```
 
-### Synchronous Parsing (Small Payload)
+Request body:
 
 ```dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+class UpdateUserRequest {
+  const UpdateUserRequest({required this.name});
 
-Future<User> fetchUser(http.Client client, int userId) async {
-  final response = await client.get(
-    Uri.parse('https://api.example.com/users/$userId'),
-    headers: {'Accept': 'application/json'},
-  );
+  final String name;
 
-  if (response.statusCode == 200) {
-    // Decode returns dynamic, cast to Map<String, dynamic>
-    final Map<String, dynamic> jsonMap = jsonDecode(response.body) as Map<String, dynamic>;
-    return User.fromJson(jsonMap);
-  } else {
-    throw Exception('Failed to load user');
-  }
+  Map<String, dynamic> toJson() => {'name': name};
 }
 ```
 
-### Background Parsing (Large Payload)
+Single object in a datasource:
 
 ```dart
-import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-
-// Top-level function required for compute()
-List<User> parseUsers(String responseBody) {
-  final parsed = (jsonDecode(responseBody) as List<dynamic>).cast<Map<String, dynamic>>();
-  return parsed.map<User>((json) => User.fromJson(json)).toList();
-}
-
-Future<List<User>> fetchUsers(http.Client client) async {
-  final response = await client.get(
-    Uri.parse('https://api.example.com/users'),
-    headers: {'Accept': 'application/json'},
-  );
-
-  if (response.statusCode == 200) {
-    // Offload expensive parsing to a background isolate
-    return compute(parseUsers, response.body);
-  } else {
-    throw Exception('Failed to load users');
-  }
-}
+TaskEither<Failure, UserModel> fetchUser(int id) => TaskEither.tryCatch(
+      () async {
+        final json = await _network.get('/users/$id') as Map<String, dynamic>;
+        return UserModel.fromJson(json);
+      },
+      (error, _) => mapToFailure(error),
+    );
 ```
+
+Long list, mapped off the UI isolate:
+
+```dart
+List<UserModel> parseUsers(List<dynamic> json) =>
+    json.cast<Map<String, dynamic>>().map(UserModel.fromJson).toList();
+
+TaskEither<Failure, List<UserModel>> fetchUsers() => TaskEither.tryCatch(
+      () async {
+        final json = await _network.get('/users') as List<dynamic>;
+        return compute(parseUsers, json);
+      },
+      (error, _) => mapToFailure(error),
+    );
+```
+
+The repository calls `model.toEntity()` and returns `TaskEither<Failure, User>`. The domain entity never sees the JSON map.

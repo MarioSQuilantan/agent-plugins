@@ -1,0 +1,139 @@
+---
+description: "Feature-first Clean Architecture for Flutter: Cubit, use cases, FpDart, injectable, and core services that hide every infrastructure SDK."
+globs: "**/*.dart"
+alwaysApply: false
+---
+
+# Flutter Architecture
+
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, and `flutter-wrap-package-service` is the workflow for adding an infrastructure package. Both follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+
+Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter.
+
+Before editing, read the nearest feature and copy its folders, names, imports, annotations, and result type. If that code contradicts this rule (for example a `Bloc` with events, or an SDK imported in a datasource), new code follows this rule and the old code stays as it is unless the request asks to change it.
+
+Make the smallest change that satisfies the request. Do not refactor unrelated code. Do not add a dependency that duplicates one already in `pubspec.yaml`. Do not hand-edit generated files (`*.g.dart`, `*.freezed.dart`, `*.config.dart`). After the change, run format, `dart analyze`, and the relevant tests when they exist, and say which commands ran.
+
+## Project structure
+
+```text
+lib/
+├── core/
+│   ├── di/
+│   ├── errors/
+│   ├── network/
+│   ├── services/
+│   └── storage/
+└── features/
+    └── feature_name/
+        ├── data/
+        │   ├── datasources/
+        │   ├── models/
+        │   ├── repositories/
+        │   └── requests/
+        ├── domain/
+        │   ├── entities/
+        │   ├── repositories/
+        │   └── use_cases/
+        └── presentation/
+            ├── cubit/
+            ├── pages/
+            └── widgets/
+```
+
+Create a directory only when a file is about to live there. Do not scaffold empty layers.
+
+- `domain/entities`: business objects. No JSON, no Flutter, no HTTP types.
+- `domain/repositories`: abstract contracts. No implementations.
+- `domain/use_cases`: one class per business operation.
+- `data/models`: response DTOs and `toEntity()`. JSON stays here.
+- `data/requests`: outbound bodies and query objects. Skip this folder when the feature sends no request-specific type.
+- `data/datasources`: the feature's remote or local calls through core services. Skip a second datasource when one already covers the source.
+- `data/repositories`: implementations of the domain contract.
+- `presentation/cubit`: `Cubit<State>` and its state. No event classes.
+- `presentation/pages` and `presentation/widgets`: rendering and user input.
+- `core/di`: the injection setup and the `@module` classes that register SDK instances.
+- `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
+- `core/network`: the `NetworkService` interface and its impl. Only the impl knows the HTTP client.
+- `core/storage`: storage services, including secure storage and local persistence.
+- `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
+
+Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature.
+
+## Infrastructure packages
+
+An infrastructure SDK is a package that does I/O, calls platform channels, or exposes a vendor API: HTTP clients (`http`, `dio`), Firebase, `flutter_secure_storage`, `shared_preferences`, `image_picker`, `share_plus`, `geolocator`, `permission_handler`, and similar.
+
+Import an infrastructure SDK only in the impl of its core service (`*_service_impl.dart`) and in the `@module` under `core/di/` that registers it. Features, Cubits, widgets, and domain depend on the service interface. Never create an SDK instance inline (`Dio()`, `FirebaseAuth.instance`, `ImagePicker()`) anywhere else.
+
+The service interface uses app types only. SDK types (`Dio`, `Response`, `DocumentSnapshot`, `XFile`) and SDK exceptions (`DioException`, `ClientException`, `FirebaseException`) do not cross it. The impl translates SDK errors into app exceptions from `core/errors/`.
+
+Name the service after the capability (`NetworkService`, `SecureStorageService`), not the package, unless sibling services use package names. Expose only the methods the app uses. Reuse an existing service for an SDK; never write a second wrapper.
+
+Architecture and pure-Dart utility packages are imported where their layer allows them: `flutter_bloc` and `go_router` in presentation; `fpdart`, `equatable`, `meta`, and `collection` in any layer; `injectable` annotations on any injectable class; `freezed_annotation` and `json_annotation` where those generators are already used.
+
+## Dependency direction
+
+The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into a sealed state. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
+
+Domain imports neither `data/` nor `presentation/`, and it does not import Flutter.
+
+Data implements domain contracts and maps models to entities. It does not import presentation.
+
+Presentation calls a use case, with one exception: a Cubit may call a repository when the operation forwards a single repository call and adds no validation, branching, or mapping. Any business rule belongs in a use case. Presentation never constructs a service, a datasource, or a repository implementation.
+
+## Cubit and UI
+
+`Cubit<State>` is the only feature state. Do not add `Bloc`, event classes, `Provider`, Riverpod, GetX, or `ChangeNotifier` for feature state.
+
+`BlocBuilder`, `BlocListener`, and `BlocSelector` are allowed on a Cubit. Using them does not allow a `Bloc` subclass.
+
+- Expose methods for user actions (`load`, `signIn`, `submit`).
+- Emit immutable states. Prefer a `sealed class` with `initial`, `loading`, `loaded`, and `failure` when those phases differ.
+- Use Freezed only when the feature needs union types, value equality, or `copyWith` that a sealed class does not already give. Do not add Freezed for a simple state.
+- Handle loading, success, and failure. Ignore a repeated submit while a request is in flight when a double submit would matter.
+- A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view.
+- Trigger navigation, dialogs, and snackbars from a `BlocListener`, never from `build()`.
+- `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: text controllers, focus, animations, and local toggles.
+
+## Errors
+
+The datasource is the only place that creates a `Failure`. It calls the core service, decodes with `fromJson`, and maps any exception with the project's helper in `core/errors/` (shown as `mapToFailure` in the skills). If no helper exists, create one there once and reuse it. Do not write a mapping function per feature.
+
+The repository does not catch exceptions. It converts the model to an entity (`.map((model) => model.toEntity())`) and may combine datasources or cache.
+
+Use the result type of the nearest feature (`Either` or `TaskEither`). Do not throw for an expected failure (network, validation, not found, unauthorized). Handle both sides of the result. Do not swallow a failure. Do not nest `Either` or `TaskEither`. Do not add a second functional error library.
+
+## Dependency injection
+
+Register dependencies with `injectable` and resolve them through the project's `getIt` from `core/di/`. Constructor injection only. Do not resolve `getIt` inside a service, datasource, repository, use case, or Cubit. Never call `GetIt.I.register*` by hand.
+
+Copy the annotation from the nearest registration. When no sample exists, use:
+
+- `@LazySingleton(as: ServiceInterface)` for a core service impl.
+- `@lazySingleton` for a datasource, with no contract. Add a datasource contract only when there are two implementations (remote and local, or one per flavor with `@Environment`) or sibling datasources already have contracts.
+- `@LazySingleton(as: RepositoryContract)` for a repository implementation.
+- `@injectable` for use cases and Cubits.
+- A `@lazySingleton` getter in a `@module` under `core/di/` for an SDK instance.
+
+Regenerate the injection config with the project's existing `build_runner` command when registrations change. Integration tests call the project's DI setup (for example `configureDependencies()`) before `pumpWidget`. Do not add another DI library.
+
+## Navigation, imports, and safety
+
+Use the project's GoRouter setup. Add routes beside the existing route table. Do not add another navigation package.
+
+Match the import style of the file you are editing. Do not mix a new `package:` import style into a feature that uses relative imports, or the reverse.
+
+Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` and the entry page only; it never exports `data/`.
+
+Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. If flavors or `envied` are already configured, use them. Do not add an environment system as part of an unrelated change.
+
+## Reuse and scope
+
+Keep each business rule, validation, and transformation in one place. Reuse an existing use case, service, helper, widget, or `Failure` before writing a new one. Do not repeat a validation in a Cubit or widget that a use case already enforces.
+
+Do not add a base Cubit, generic repository, shared helper, or option that the current request does not need. When two pieces of code only look alike but change for different reasons, keep them separate rather than forcing a shared abstraction.
+
+## Done
+
+The change is done when the new feature code follows the nearest feature, state is a Cubit, business rules sit in a use case, the datasource creates the `Failure`, infrastructure SDKs are imported only in a core service impl or a DI module, and dependencies come from the constructor. Tests cover the new behavior when it can fail or branch. Generated files were regenerated, not edited. The commands that ran, and any that could not run, are stated in the summary.

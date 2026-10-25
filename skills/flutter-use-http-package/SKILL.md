@@ -1,174 +1,200 @@
 ---
 name: flutter-use-http-package
-description: Use the `http` package to execute GET, POST, PUT, or DELETE requests. Use when you need to fetch from or send data to a REST API.
+description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
-  model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 21:36:42 GMT
+  model: manual
+  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
 ---
-# Implementing Flutter Networking
+# REST Calls Through NetworkService
 
-## Contents
-- [Configuration & Permissions](#configuration--permissions)
-- [Request Execution & Response Handling](#request-execution--response-handling)
-- [Background Parsing](#background-parsing)
-- [Workflow: Executing Network Operations](#workflow-executing-network-operations)
-- [Examples](#examples)
+Follow the Flutter Architecture rule. The app knows `NetworkService`, not the HTTP client. Only `core/network/network_service_impl.dart` and its module in `core/di/` import `http`, `dio`, or any other client. Datasources inject `NetworkService` and create the `Failure`.
 
-## Configuration & Permissions
+Do not call the client from a widget, a Cubit, or a datasource. Do not use `FutureBuilder` for feature data. Do not let `ClientException`, `DioException`, or `SocketException` leave the impl.
 
-Configure the environment and platform-specific permissions required for network access.
+## Workflow
 
-1. Add the `http` package dependency via the terminal:
-   ```bash
-   flutter pub add http
-   ```
-2. Import the package in your Dart files:
-   ```dart
-   import 'package:http/http.dart' as http;
-   ```
-3. Configure Android permissions by adding the Internet permission to `android/app/src/main/AndroidManifest.xml`:
-   ```xml
-   <uses-permission android:name="android.permission.INTERNET" />
-   ```
-4. Configure macOS entitlements by adding the network client key to both `macos/Runner/DebugProfile.entitlements` and `macos/Runner/Release.entitlements`:
-   ```xml
-   <key>com.apple.security.network.client</key>
-   <true/>
-   ```
+- [ ] **1. Reuse.** If `core/network/` already has `NetworkService`, use it and skip to step 6. Add a method only when the interface lacks one.
+- [ ] **2. Interface.** Create `NetworkService` with `get`, `post`, `put`, and `delete`. It returns decoded JSON as `Object?` (a map, a list, or `null`) and throws app exceptions.
+- [ ] **3. Exceptions.** Add `ServerException`, `UnauthorizedException`, and `NetworkException` to `core/errors/` when they are missing, and add their cases to the exception-to-`Failure` helper.
+- [ ] **4. Impl.** Implement the interface with the project's client. Translate client errors and non-2xx statuses into app exceptions. Add auth headers here, reading the token from `SecureStorageService` or the project's token provider. Datasources never pass tokens.
+- [ ] **5. Module and platforms.** Register the client in a `@module` under `core/di/`. Add the Android `INTERNET` permission and the macOS `com.apple.security.network.client` entitlement in `DebugProfile.entitlements` and `Release.entitlements` when those targets exist and the entries are missing.
+- [ ] **6. Datasource.** Inject `NetworkService`. Wrap the call, decode with `fromJson`, and map any exception with the helper. Return `Either` or `TaskEither`, matching the nearest feature.
+- [ ] **7. Repository and Cubit.** The repository maps `model.toEntity()` without catching. The use case and the Cubit follow the architecture skill.
+- [ ] **8. Check.** Regenerate the injection config, run the formatter and `dart analyze`, and test the datasource with a mocked `NetworkService`.
 
-## Request Execution & Response Handling
+## Request rules
 
-Execute HTTP operations and map responses to strongly typed Dart objects.
+- Build URLs inside the impl from the project's base URL config. Datasources pass a path and query map.
+- Send POST and PUT bodies as `request.toJson()` from a `data/requests` object. The impl encodes JSON and sets `Content-Type` to `application/json; charset=UTF-8`.
+- Treat any 2xx as success. Throw `UnauthorizedException` on 401, `ServerException(statusCode)` on any other non-2xx status, and `NetworkException` on no connection or a timeout.
+- Return `null` for an empty body. For DELETE, the datasource returns `Right(unit)`.
+- For a large payload, decode in the impl with `compute(jsonDecode, response.body)`.
 
-*   **URIs:** Always parse URL strings using `Uri.parse('your_url')`.
-*   **Headers:** Inject authorization and content-type headers via the `headers` parameter map. Use `HttpHeaders.authorizationHeader` for auth tokens.
-*   **Payloads:** For POST and PUT requests, encode the body using `jsonEncode()` from `dart:convert`.
-*   **Status Validation:** Evaluate `response.statusCode`. Treat `200 OK` (GET/PUT/DELETE) and `201 CREATED` (POST) as success. 
-*   **Error Handling:** Throw explicit exceptions for non-success status codes. Never return `null` on failure, as this prevents `FutureBuilder` from triggering its error state and causes infinite loading indicators.
-*   **Deserialization:** Parse the raw string using `jsonDecode(response.body)` and map it to a custom Dart object using a factory constructor (e.g., `fromJson`).
-
-## Background Parsing
-
-Offload expensive JSON parsing to a separate Isolate to prevent UI jank (frame drops).
-
-*   Import `package:flutter/foundation.dart`.
-*   Use the `compute()` function to run the parsing logic in a background isolate.
-*   Ensure the parsing function passed to `compute()` is a top-level function or a static method, as closures or instance methods cannot be passed across isolates.
-
-## Workflow: Executing Network Operations
-
-Use the following checklist to implement and validate network operations.
-
-**Task Progress:**
-- [ ] 1. Define the strongly typed Dart model with a `fromJson` factory constructor.
-- [ ] 2. Implement the network request method returning a `Future<Model>`.
-- [ ] 3. Apply conditional logic based on the operation type:
-  - **If fetching data (GET):** Append query parameters to the URI.
-  - **If mutating data (POST/PUT):** Set `'Content-Type': 'application/json; charset=UTF-8'` and attach the `jsonEncode` body.
-  - **If deleting data (DELETE):** Return an empty model instance on success (`200 OK`).
-- [ ] 4. Validate the `statusCode` and throw an `Exception` on failure.
-- [ ] 5. Integrate the `Future` into the UI using `FutureBuilder`.
-- [ ] 6. Handle `snapshot.hasData`, `snapshot.hasError`, and default to a `CircularProgressIndicator`.
-- [ ] 7. **Feedback Loop:** Run the app -> trigger the network request -> review console for unhandled exceptions -> fix parsing or permission errors.
-
-## Examples
-
-### High-Fidelity Implementation: Fetching and Parsing in the Background
+## Core: interface, exceptions, and mapping
 
 ```dart
+// core/network/network_service.dart
+abstract class NetworkService {
+  Future<Object?> get(String path, {Map<String, String>? query});
+  Future<Object?> post(String path, {Object? body});
+  Future<Object?> put(String path, {Object? body});
+  Future<Object?> delete(String path);
+}
+```
+
+```dart
+// core/errors/exceptions.dart
+class ServerException implements Exception {
+  const ServerException({required this.statusCode});
+  final int statusCode;
+}
+
+class UnauthorizedException implements Exception {
+  const UnauthorizedException();
+}
+
+class NetworkException implements Exception {
+  const NetworkException();
+}
+```
+
+```dart
+// core/errors/map_to_failure.dart
+Failure mapToFailure(Object error) => switch (error) {
+      UnauthorizedException() => const UnauthorizedFailure(),
+      ServerException(:final statusCode) => ServerFailure(statusCode: statusCode),
+      NetworkException() => const NetworkFailure(),
+      FormatException() || TypeError() => const SerializationFailure(),
+      _ => const UnexpectedFailure(),
+    };
+```
+
+Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none.
+
+## Impl with `http`
+
+```dart
+// core/network/network_service_impl.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+
 import 'package:http/http.dart' as http;
+import 'package:injectable/injectable.dart';
 
-// 1. Top-level parsing function for Isolate
-List<Photo> parsePhotos(String responseBody) {
-  final parsed = (jsonDecode(responseBody) as List<Object?>)
-      .cast<Map<String, Object?>>();
-  return parsed.map<Photo>(Photo.fromJson).toList();
-}
+@LazySingleton(as: NetworkService)
+class NetworkServiceImpl implements NetworkService {
+  NetworkServiceImpl(this._client, this._config, this._storage);
 
-// 2. Network execution with background parsing
-Future<List<Photo>> fetchPhotos() async {
-  final response = await http.get(
-    Uri.parse('https://jsonplaceholder.typicode.com/photos'),
-    headers: {
-      HttpHeaders.authorizationHeader: 'Bearer your_token_here',
+  final http.Client _client;
+  final NetworkConfig _config;
+  final SecureStorageService _storage;
+
+  @override
+  Future<Object?> get(String path, {Map<String, String>? query}) =>
+      _send((headers) => _client.get(_uri(path, query), headers: headers));
+
+  @override
+  Future<Object?> post(String path, {Object? body}) => _send(
+        (headers) => _client.post(_uri(path), headers: headers, body: jsonEncode(body)),
+      );
+
+  @override
+  Future<Object?> put(String path, {Object? body}) => _send(
+        (headers) => _client.put(_uri(path), headers: headers, body: jsonEncode(body)),
+      );
+
+  @override
+  Future<Object?> delete(String path) =>
+      _send((headers) => _client.delete(_uri(path), headers: headers));
+
+  Uri _uri(String path, [Map<String, String>? query]) =>
+      Uri.parse('${_config.baseUrl}$path').replace(queryParameters: query);
+
+  Future<Object?> _send(
+    Future<http.Response> Function(Map<String, String> headers) request,
+  ) async {
+    final token = await _storage.read('access_token');
+    final headers = {
       HttpHeaders.acceptHeader: 'application/json',
-    },
-  );
+      HttpHeaders.contentTypeHeader: 'application/json; charset=UTF-8',
+      if (token != null) HttpHeaders.authorizationHeader: 'Bearer $token',
+    };
 
-  if (response.statusCode == 200) {
-    // Offload heavy parsing to a background isolate
-    return compute(parsePhotos, response.body);
-  } else {
-    throw Exception('Failed to load photos. Status: ${response.statusCode}');
-  }
-}
+    final http.Response response;
+    try {
+      response = await request(headers).timeout(_config.timeout);
+    } on SocketException {
+      throw const NetworkException();
+    } on TimeoutException {
+      throw const NetworkException();
+    } on http.ClientException {
+      throw const NetworkException();
+    }
 
-// 3. Strongly typed model
-class Photo {
-  final int id;
-  final String title;
-  final String thumbnailUrl;
-
-  const Photo({
-    required this.id,
-    required this.title,
-    required this.thumbnailUrl,
-  });
-
-  factory Photo.fromJson(Map<String, dynamic> json) {
-    return Photo(
-      id: json['id'] as int,
-      title: json['title'] as String,
-      thumbnailUrl: json['thumbnailUrl'] as String,
-    );
-  }
-}
-
-// 4. UI Integration
-class PhotoGallery extends StatefulWidget {
-  const PhotoGallery({super.key});
-
-  @override
-  State<PhotoGallery> createState() => _PhotoGalleryState();
-}
-
-class _PhotoGalleryState extends State<PhotoGallery> {
-  late Future<List<Photo>> _futurePhotos;
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialize Future once to prevent re-fetching on rebuilds
-    _futurePhotos = fetchPhotos();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Photo>>(
-      future: _futurePhotos,
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          final photos = snapshot.data!;
-          return ListView.builder(
-            itemCount: photos.length,
-            itemBuilder: (context, index) => ListTile(
-              leading: Image.network(photos[index].thumbnailUrl),
-              title: Text(photos[index].title),
-            ),
-          );
-        } else if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-        
-        // Default loading state
-        return const Center(child: CircularProgressIndicator());
-      },
-    );
+    if (response.statusCode == 401) throw const UnauthorizedException();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ServerException(statusCode: response.statusCode);
+    }
+    if (response.body.isEmpty) return null;
+    return jsonDecode(response.body);
   }
 }
 ```
+
+`NetworkConfig` is the project's environment config (base URL, timeout). Register `http.Client` in a module:
+
+```dart
+// core/di/network_module.dart
+import 'package:http/http.dart' as http;
+import 'package:injectable/injectable.dart';
+
+@module
+abstract class NetworkModule {
+  @lazySingleton
+  http.Client get httpClient => http.Client();
+}
+```
+
+With Dio, keep the same interface. Catch `DioException` in the impl: a response with status 401 becomes `UnauthorizedException`, any other response status becomes `ServerException`, and no response becomes `NetworkException`. Return `response.data`.
+
+## Datasource
+
+```dart
+@lazySingleton
+class ProductsRemoteDataSource {
+  ProductsRemoteDataSource(this._network);
+
+  final NetworkService _network;
+
+  TaskEither<Failure, List<ProductModel>> fetchProducts() => TaskEither.tryCatch(
+        () async {
+          final json = await _network.get('/products') as List<dynamic>;
+          return json
+              .cast<Map<String, dynamic>>()
+              .map(ProductModel.fromJson)
+              .toList();
+        },
+        (error, _) => mapToFailure(error),
+      );
+
+  TaskEither<Failure, ProductModel> createProduct(CreateProductRequest request) =>
+      TaskEither.tryCatch(
+        () async {
+          final json = await _network.post('/products', body: request.toJson());
+          return ProductModel.fromJson(json as Map<String, dynamic>);
+        },
+        (error, _) => mapToFailure(error),
+      );
+
+  TaskEither<Failure, Unit> deleteProduct(String id) => TaskEither.tryCatch(
+        () async {
+          await _network.delete('/products/$id');
+          return unit;
+        },
+        (error, _) => mapToFailure(error),
+      );
+}
+```
+
+The repository returns `_remote.fetchProducts().map((models) => models.map((m) => m.toEntity()).toList())`. The Cubit emits loading, loaded, or failure, and the page renders them with `BlocBuilder`.

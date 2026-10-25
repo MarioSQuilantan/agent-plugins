@@ -1,162 +1,163 @@
 ---
 name: flutter-apply-architecture-best-practices
-description: Architects a Flutter application using the recommended layered approach (UI, Logic, Data). Use when structuring a new project or refactoring for scalability.
+description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
-  model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 20:11:20 GMT
+  model: manual
+  last_modified: Sun, 25 Oct 2026 17:45:00 GMT
 ---
-# Architecting Flutter Applications
+# Adding a Flutter Feature
 
-## Contents
-- [Architectural Layers](#architectural-layers)
-- [Project Structure](#project-structure)
-- [Workflow: Implementing a New Feature](#workflow-implementing-a-new-feature)
-- [Examples](#examples)
+Follow the Flutter Architecture rule. This skill is the workflow for that rule.
 
-## Architectural Layers
+Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, `Bloc` event classes, Provider, Riverpod, or GetX. Do not create a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
 
-Enforce strict Separation of Concerns by dividing the application into distinct layers. Never mix UI rendering with business logic or data fetching.
+Read the nearest feature first and copy its folders, names, imports, annotations, and result type (`Either` or `TaskEither`). If that code contradicts the rule, new code follows the rule. Create a directory only when a file is about to live there.
 
-### UI Layer (Presentation)
-Implement the MVVM (Model-View-ViewModel) pattern to manage UI state and logic.
-*   **Views:** Write reusable, lean widgets. Restrict logic in Views to UI-specific operations (e.g., animations, layout constraints, simple routing). Pass all required data from the ViewModel.
-*   **ViewModels:** Manage UI state and handle user interactions. Extend `ChangeNotifier` (or use `Listenable`) to expose state. Expose immutable state snapshots to the View. Inject Repositories into ViewModels via the constructor.
+## Workflow
 
-### Data Layer
-Implement the Repository pattern to isolate data access logic and create a single source of truth.
-*   **Services:** Create stateless classes to wrap external APIs (HTTP clients, local databases, platform plugins). Return raw API models or `Result` wrappers.
-*   **Repositories:** Consume one or more Services. Transform raw API models into clean Domain Models. Handle caching, offline synchronization, and retry logic. Expose Domain Models to ViewModels.
+Copy this checklist and complete it in order.
 
-### Logic Layer (Domain - Optional)
-*   **Use Cases:** Implement this layer only if the application contains complex business logic that clutters the ViewModel, or if logic must be reused across multiple ViewModels. Extract this logic into dedicated Use Case (interactor) classes that sit between ViewModels and Repositories.
+- [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/`. No Flutter, JSON, or HTTP types.
+- [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`.
+- [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`. Put validation and branching here. Skip the use case only when the operation forwards a single repository call and adds no rule.
+- [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
+- [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
+- [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
+- [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
+- [ ] **8. Cubit.** Add a `sealed` state and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight.
+- [ ] **9. UI.** Add a page under `presentation/pages/` that provides the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view from `presentation/widgets/`. The view receives state and callbacks. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
+- [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, and `@injectable` for use cases and Cubits. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
+- [ ] **11. Route.** Add the page to the existing GoRouter table.
+- [ ] **12. Tests.** Test the datasource with a mocked core service, and test the use case and the Cubit transitions when the behavior can fail or branch. Use the mock library already in the project.
+- [ ] **13. Checks.** Run the formatter, `dart analyze`, and the relevant tests. Report which commands ran.
 
-## Project Structure
-
-Organize the codebase using a hybrid approach: group UI components by feature, and group Data/Domain components by type.
+## Where code goes
 
 ```text
-lib/
+lib/features/<feature>/
 ├── data/
-│   ├── models/         # API models
-│   ├── repositories/   # Repository implementations
-│   └── services/       # API clients, local storage wrappers
+│   ├── datasources/
+│   ├── models/
+│   ├── repositories/
+│   └── requests/
 ├── domain/
-│   ├── models/         # Clean domain models
-│   └── use_cases/      # Optional business logic classes
-└── ui/
-    ├── core/           # Shared widgets, themes, typography
-    └── features/
-        └── [feature_name]/
-            ├── view_models/
-            └── views/
+│   ├── entities/
+│   ├── repositories/
+│   └── use_cases/
+└── presentation/
+    ├── cubit/
+    ├── pages/
+    └── widgets/
 ```
 
-## Workflow: Implementing a New Feature
+Injection setup and SDK modules go in `core/di/`. Exceptions, failures, and the exception-to-`Failure` helper go in `core/errors/`. `NetworkService` goes in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
 
-Follow this sequential workflow when adding a new feature to the application. Copy the checklist to track progress.
+Move feature code into `core/` only when two features already use it.
 
-### Task Progress
-- [ ] **Step 1: Define Domain Models.** Create immutable data classes for the feature using `freezed` or `built_value`.
-- [ ] **Step 2: Implement Services.** Create or update Service classes to handle external API communication.
-- [ ] **Step 3: Implement Repositories.** Create the Repository to consume Services and return Domain Models.
-- [ ] **Step 4: Apply Conditional Logic (Domain Layer).**
-  - *If the feature requires complex data transformation or cross-repository logic:* Create a Use Case class.
-  - *If the feature is a simple CRUD operation:* Skip to Step 5.
-- [ ] **Step 5: Implement the ViewModel.** Create the ViewModel extending `ChangeNotifier`. Inject required Repositories/Use Cases. Expose immutable state and command methods.
-- [ ] **Step 6: Implement the View.** Create the UI widget. Use `ListenableBuilder` or `AnimatedBuilder` to listen to ViewModel changes.
-- [ ] **Step 7: Inject Dependencies.** Register the new Service, Repository, and ViewModel in the dependency injection container (e.g., `provider` or `get_it`).
-- [ ] **Step 8: Run Validator.** Execute unit tests for the ViewModel and Repository.
-  - *Feedback Loop:* Run tests -> Review failures -> Fix logic -> Re-run until passing.
+## Call chain
 
-## Examples
-
-### Data Layer: Service and Repository
+Datasource, the only place that creates a `Failure`:
 
 ```dart
-// 1. Service (Raw API interaction)
-class ApiClient {
-  Future<UserApiModel> fetchUser(String id) async {
-    // HTTP GET implementation...
-  }
-}
+@lazySingleton
+class AuthRemoteDataSource {
+  AuthRemoteDataSource(this._network);
 
-// 2. Repository (Single source of truth, returns Domain Model)
-class UserRepository {
-  UserRepository({required ApiClient apiClient}) : _apiClient = apiClient;
-  
-  final ApiClient _apiClient;
-  User? _cachedUser;
+  final NetworkService _network;
 
-  Future<User> getUser(String id) async {
-    if (_cachedUser != null) return _cachedUser!;
-    
-    final apiModel = await _apiClient.fetchUser(id);
-    _cachedUser = User(id: apiModel.id, name: apiModel.fullName); // Transform to Domain Model
-    return _cachedUser!;
-  }
+  TaskEither<Failure, UserModel> signIn(SignInRequest request) =>
+      TaskEither.tryCatch(
+        () async {
+          final json = await _network.post('/auth/login', body: request.toJson());
+          return UserModel.fromJson(json as Map<String, dynamic>);
+        },
+        (error, _) => mapToFailure(error),
+      );
 }
 ```
 
-### UI Layer: ViewModel and View
+Repository, which maps without catching:
 
 ```dart
-// 3. ViewModel (State management and presentation logic)
-class ProfileViewModel extends ChangeNotifier {
-  ProfileViewModel({required UserRepository userRepository}) 
-      : _userRepository = userRepository;
+@LazySingleton(as: AuthRepository)
+class AuthRepositoryImpl implements AuthRepository {
+  AuthRepositoryImpl(this._remote);
 
-  final UserRepository _userRepository;
-
-  User? _user;
-  User? get user => _user;
-
-  bool _isLoading = false;
-  bool get isLoading => _isLoading;
-
-  Future<void> loadProfile(String id) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      _user = await _userRepository.getUser(id);
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-}
-
-// 4. View (Dumb UI component)
-class ProfileView extends StatelessWidget {
-  const ProfileView({super.key, required this.viewModel});
-
-  final ProfileViewModel viewModel;
+  final AuthRemoteDataSource _remote;
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: viewModel,
-      builder: (context, _) {
-        if (viewModel.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        
-        final user = viewModel.user;
-        if (user == null) {
-          return const Center(child: Text('User not found'));
-        }
+  TaskEither<Failure, User> signIn({
+    required String email,
+    required String password,
+  }) =>
+      _remote
+          .signIn(SignInRequest(email: email, password: password))
+          .map((model) => model.toEntity());
+}
+```
 
-        return Column(
-          children: [
-            Text(user.name),
-            ElevatedButton(
-              onPressed: () => viewModel.loadProfile(user.id),
-              child: const Text('Refresh'),
-            ),
-          ],
-        );
-      },
+Use case with a business rule:
+
+```dart
+@injectable
+class SignIn {
+  SignIn(this._repository);
+
+  final AuthRepository _repository;
+
+  TaskEither<Failure, User> call(SignInParams params) {
+    final email = params.email.trim();
+    if (email.isEmpty || params.password.isEmpty) {
+      return TaskEither.left(
+        const ValidationFailure('Email and password are required'),
+      );
+    }
+    return _repository.signIn(email: email, password: params.password);
+  }
+}
+```
+
+Cubit and sealed state:
+
+```dart
+sealed class SignInState {
+  const SignInState();
+}
+
+class SignInInitial extends SignInState {
+  const SignInInitial();
+}
+
+class SignInLoading extends SignInState {
+  const SignInLoading();
+}
+
+class SignInSuccess extends SignInState {
+  const SignInSuccess(this.user);
+  final User user;
+}
+
+class SignInFailure extends SignInState {
+  const SignInFailure(this.failure);
+  final Failure failure;
+}
+
+@injectable
+class SignInCubit extends Cubit<SignInState> {
+  SignInCubit(this._signIn) : super(const SignInInitial());
+
+  final SignIn _signIn;
+
+  Future<void> submit(SignInParams params) async {
+    if (state is SignInLoading) return;
+    emit(const SignInLoading());
+    final result = await _signIn(params).run();
+    result.fold(
+      (failure) => emit(SignInFailure(failure)),
+      (user) => emit(SignInSuccess(user)),
     );
   }
 }
 ```
+
+The page wraps `SignInView` in `BlocProvider(create: (_) => getIt<SignInCubit>())`. `SignInView` renders one branch per sealed state with `BlocBuilder` and reacts to `SignInSuccess` with a `BlocListener` that navigates. Neither calls the repository, the datasource, or a service.
