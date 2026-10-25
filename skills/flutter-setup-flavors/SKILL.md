@@ -3,7 +3,7 @@ name: flutter-setup-flavors
 description: Sets up environment config with envied, AppConfig, and injectable environments for a single environment, several flavors, or one more flavor such as demo or qa. Use when creating environments, adding or converting flavors, or moving hardcoded config into AppConfig.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 19:15:00 GMT
+  last_modified: Sun, 25 Oct 2026 19:20:00 GMT
 ---
 # Setting Up Flavors and Environment Config
 
@@ -37,7 +37,7 @@ To go from a single environment to several, rename `.env` to `.env.<name>` for t
 - [ ] **6. DI and bootstrap.** Make the DI setup take the environment. Add one shared `bootstrap` in `app/` and one `main_<flavor>.dart` per flavor that only calls it. A single environment keeps `main.dart`.
 - [ ] **7. Android.** Several flavors only: add a flavor dimension and one entry per flavor in `productFlavors`.
 - [ ] **8. iOS.** Several flavors only: add the build configurations, xcconfig files, schemes, and Podfile mappings for each flavor.
-- [ ] **9. Launch configs.** Add one entry per flavor in `.vscode/launch.json` when the project has one.
+- [ ] **9. Launch configs.** Several flavors only: create `.vscode/launch.json` when it is missing, with one entry per flavor. When it exists, add only the missing entries and keep the others. If `.gitignore` ignores `.vscode/`, tell the user the file stays local.
 - [ ] **10. Generate.** Run `dart run build_runner clean`, then the project's `build_runner build` command.
 - [ ] **11. Verify.** Run or build each touched flavor (`flutter run --flavor <flavor> -t lib/main_<flavor>.dart`). Report which flavors ran and which could not, for example iOS without a Mac.
 
@@ -178,12 +178,26 @@ Xcode project edits are error-prone from the command line. When they cannot be v
 
 ## Launch config
 
+Each entry uses the flavor name for `name` and `--flavor`, and points `program` at that flavor's entry point.
+
 ```json
 {
-  "name": "dev",
-  "request": "launch",
-  "type": "dart",
-  "program": "lib/main_dev.dart",
-  "args": ["--flavor", "dev"]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_dev.dart",
+      "args": ["--flavor", "dev"]
+    },
+    {
+      "name": "prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_prod.dart",
+      "args": ["--flavor", "prod"]
+    }
+  ]
 }
 ```

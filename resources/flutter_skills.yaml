@@ -475,6 +475,7 @@
     *   Create an AppConfig class in core/config with one implementation per flavor registered with @LazySingleton(as: AppConfig, env: ['<flavor>']). Shared values live once in AppConfig.
     *   Make the DI setup take the environment, add a shared bootstrap in app/, and one main_<flavor>.dart per flavor that only calls it.
     *   Configure Android productFlavors and iOS build configurations, xcconfig files, schemes named after the flavor, and Podfile mappings. List iOS steps for the user when they cannot be verified.
+    *   Create .vscode/launch.json when it is missing, with one entry per flavor that runs --flavor <flavor> with lib/main_<flavor>.dart. When it exists, add only the missing entries. Warn when .gitignore ignores .vscode/.
     *   Run build_runner clean before build, run or build each touched flavor, and report which flavors were verified.
   resources:
     - https://docs.flutter.dev/deployment/flavors
