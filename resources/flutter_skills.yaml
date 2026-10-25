@@ -33,7 +33,7 @@
         * Integration tests verify the behavior of the complete app and can be used to validate how individual pieces work together or capture app performance on a real device. They are also known as end-to-end or GUI testing.
         * Use `flutter_test` APIs to write tests in a style similar to widget tests.
         * To verify a widget is displayed, load the main app widget using `tester.pumpWidget` and then use `expect` with `findsOneWidget`.
-        * For user interactions like tapping, use `tester.tap` and then `tester.pumpAndSettle` to wait for UI changes.
+        * For user interactions like tapping, use `tester.tap` and then `tester.pumpAndSettle` to wait for UI changes. While a repeating animation such as a progress indicator is on screen, use `pump(duration)` instead, because `pumpAndSettle` times out.
         * To verify a widget is not displayed, use `expect` with `findsNothing`.
         * For scrolling, `integration_test` allows using `tester.scrollUntilVisible` to scroll to a specific item.
         * When working with `flutter_driver` (for migration or specific scenarios), `waitFor` is used to locate widgets, and `waitForAbsent` to ensure a widget is not present. `flutter_driver` also uses `driver.tap` for interactions and `driver.scroll` for scrolling.
@@ -298,7 +298,7 @@
         *   To handle scrolling, the `WidgetTester` class provides the `scrollUntilVisible()` method, which scrolls until a specific widget is visible. This is useful when the height of items in a list can vary.
     8.  **Rebuild the widget tree after interactions**. Since Flutter doesn't automatically rebuild widgets in the test environment after user interactions update the app's state, you need to call `pump()` or `pumpAndSettle()` methods provided by the `WidgetTester` to ensure the widget tree is rebuilt.
     9.  **Run the tests**. Execute the tests using the command `flutter test test/widget_test.dart` from the root of your project.
-    10. **Test Cubit-backed UI**. In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`. Pump views and field widgets with plain values and callbacks. For a widget that reads a Cubit, build the real Cubit with a use case mocked with the project's mock library (mocktail when there is none), provide it with `BlocProvider.value`, and close it in `addTearDown`. Do not resolve `getIt` or call `configureDependencies()` in a widget test. Pump with `MaterialApp(theme: appTheme)` from `core/theme/` so text sizes and overflow match the app. Any `setState` example only demonstrates the `WidgetTester` API.
+    10. **Test Cubit-backed UI**. In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`. Pump views and field widgets with plain values and callbacks. For a widget that reads a Cubit, build the real Cubit with a use case mocked with the project's mock library (mocktail when there is none), provide it with `BlocProvider.value`, and close it in `addTearDown`. Do not resolve `getIt` or call `configureDependencies()` in a widget test. Pump with `MaterialApp(theme: appTheme)` from `core/theme/` so text sizes and overflow match the app. Use `pump(duration)` instead of `pumpAndSettle` while a repeating animation runs. Any `setState` example only demonstrates the `WidgetTester` API.
 
     A widget test (also known as a component test in other UI frameworks) aims to verify that a single widget's UI looks and interacts as expected. It involves multiple classes and requires a test environment that provides the appropriate widget lifecycle context. Widget tests are more comprehensive than unit tests because the widget being tested can receive user actions, perform layout, and instantiate child widgets. However, like unit tests, the widget test environment is a simpler implementation than a full UI system.
   resources:
@@ -515,3 +515,29 @@
     - https://docs.flutter.dev/ui/design/text/typography
     - https://api.flutter.dev/flutter/material/TextTheme-class.html
     - https://pub.dev/packages/auto_size_text
+- name: flutter-add-animation
+  description: Adds Flutter animations at the lowest level that works, from
+    implicit widgets to AnimationController, page transitions, Hero, and
+    animated painters, driven by Cubit state and respecting reduced motion.
+    Use when animating a widget, a state change, a list, a route transition, or
+    a custom drawing.
+  examplePrompt: "Animate the profile screen between loading, loaded, and error states"
+  instructions: |
+    Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc. Animation state is UI state: an AnimationController lives in a StatefulWidget, never in a Cubit, and the Cubit only decides what to show.
+
+    The skill must tell the agent to:
+    *   Reuse existing motion constants, transition builders, and animation packages before adding anything.
+    *   Pick the lowest level: Animated* widgets (including AnimatedScale, AnimatedRotation, AnimatedSlide), AnimatedSwitcher with a key per state, TweenAnimationBuilder, AnimationController with SingleTickerProviderStateMixin, Interval-based stagger, CustomTransitionPage in GoRouter, Hero, and CustomPainter with repaint plus RepaintBoundary.
+    *   Use theme colors, Durations, and Easing or Curves. Keep UI transitions between 200 and 400 ms.
+    *   Respect MediaQuery.disableAnimationsOf: skip decorative motion, stop repeating animations, and use zero or fade transitions.
+    *   Dispose every AnimationController and CurvedAnimation, create animations in initState rather than build, and never animate with setState from a timer or loop.
+    *   React to Cubit state by passing values to the animated widget and acting in didUpdateWidget, or from the page's BlocListener.
+    *   Make Hero tags unique per route, including the item id.
+    *   Test with pump(duration), never pumpAndSettle while a repeating animation runs, and test reduced motion with hasRunningAnimations.
+  resources:
+    - https://docs.flutter.dev/ui/animations
+    - https://docs.flutter.dev/ui/animations/implicit-animations
+    - https://docs.flutter.dev/ui/animations/staggered-animations
+    - https://docs.flutter.dev/ui/animations/hero-animations
+    - https://api.flutter.dev/flutter/widgets/MediaQuery/disableAnimationsOf.html
+    - https://pub.dev/documentation/go_router/latest/go_router/CustomTransitionPage-class.html

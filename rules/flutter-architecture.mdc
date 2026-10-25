@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Flutter Architecture
 
-This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, and `flutter-apply-responsive-text` is the workflow for typography and text that must fit. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, `flutter-apply-responsive-text` is the workflow for typography and text that must fit, and `flutter-add-animation` is the workflow for animations. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
 
 Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter. Forms use `formz`; add it only when the project gets its first form.
 
@@ -108,7 +108,7 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 - After an `await`, return when `isClosed` is true before calling `emit`.
 - A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view. In a form, the stateless field widgets are the views, each rebuilt by its own `BlocSelector`.
 - Trigger navigation, dialogs, and snackbars from a `BlocListener`, never from `build()`.
-- `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: focus, animations, and local toggles such as showing a password.
+- `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: focus, animations, and local toggles such as showing a password. An `AnimationController` lives in that widget, never in a Cubit or its state.
 - Form field values live in the Cubit. Use `initialValue` and `onChanged`, not a `TextEditingController`, unless the Cubit must write the text (prefill for editing, clearing, autocomplete).
 
 ## Errors

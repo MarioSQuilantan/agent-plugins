@@ -3,10 +3,11 @@
   "groups": [
     {
       "title": "UI & Layout",
-      "description": "Responsive Flutter layouts and text, constraint debugging, and app localization.",
+      "description": "Responsive Flutter layouts and text, animations, constraint debugging, and app localization.",
       "skills": [
         "flutter-build-responsive-layout",
         "flutter-apply-responsive-text",
+        "flutter-add-animation",
         "flutter-fix-layout-issues",
         "flutter-setup-localization"
       ]

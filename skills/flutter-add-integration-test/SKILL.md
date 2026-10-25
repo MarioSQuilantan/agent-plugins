@@ -3,7 +3,7 @@ name: flutter-add-integration-test
 description: Configures Flutter Driver for app interaction and converts MCP actions into permanent integration tests. Use when adding integration testing to a project, exploring UI components via MCP, or automating user flows with the integration_test package.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 22:40:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:50:00 GMT
 ---
 # Implementing Flutter Integration Tests
 
@@ -48,7 +48,7 @@ Structure integration tests using the `flutter_test` API paradigm.
 - Initialize the binding by calling `IntegrationTestWidgetsFlutterBinding.ensureInitialized();` at the start of `main()`.
 - Load the application UI using `await tester.pumpWidget(MyApp());`.
 - If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), and reset it with `await getIt.reset()` in `tearDown` when several tests set it up. When the test must not reach the real backend, push a test scope after the DI setup runs and before anything resolves the service: `getIt.pushNewScope(init: (getIt) => getIt.registerSingleton<NetworkService>(FakeNetworkService()))`. The fake shadows the real registration, and `await getIt.reset()` in `tearDown` removes both. This is the only place where code registers a dependency by hand.
-- Trigger frames and wait for animations to complete using `await tester.pumpAndSettle();` after interactions like `tester.tap()`.
+- Trigger frames and wait for animations to complete using `await tester.pumpAndSettle();` after interactions like `tester.tap()`. While a repeating animation is on screen, such as a `CircularProgressIndicator`, `pumpAndSettle` times out; use `pump(duration)` or wait for the finder instead.
 - Assert widget visibility using `expect(find.byKey(ValueKey('foo')), findsOneWidget);` or `findsNothing`.
 - Scroll to specific off-screen widgets using `await tester.scrollUntilVisible(itemFinder, 500.0, scrollable: listFinder);`.
 

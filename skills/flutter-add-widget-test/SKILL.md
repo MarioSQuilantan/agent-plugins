@@ -3,7 +3,7 @@ name: flutter-add-widget-test
 description: Implement a component-level test using `WidgetTester` to verify UI rendering and user interactions (tapping, scrolling, entering text). Use when validating that a specific widget displays correct data and responds to events as expected.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:50:00 GMT
 ---
 # Writing Flutter Widget Tests
 
@@ -68,6 +68,7 @@ In a project that follows the Flutter Architecture rule, feature state lives in 
 *   **Widgets that read a Cubit (a form):** Build the real Cubit with a mocked use case, provide it with `BlocProvider.value`, and close it in `addTearDown`. Use the project's mock library, or `mocktail` when there is none.
 *   Do not resolve `getIt` or call `configureDependencies()` in a widget test.
 *   Pump with `MaterialApp(theme: appTheme)` from `core/theme/`, so text sizes and overflow match the app.
+*   `pumpAndSettle` throws "pumpAndSettle timed out" while a repeating animation runs (a loading indicator, a pulse). Use `pump(duration)` there, as in `flutter-add-animation`.
 
 ```dart
 class MockSignInUseCase extends Mock implements SignInUseCase {}
