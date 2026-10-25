@@ -6,9 +6,9 @@ alwaysApply: false
 
 # Flutter Architecture
 
-This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, and `flutter-wrap-package-service` is the workflow for adding an infrastructure package. Both follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, and `flutter-build-form` is the workflow for a form. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
 
-Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter.
+Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter. Forms use `formz`; add it only when the project gets its first form.
 
 Before editing, read the nearest feature and copy its folders, names, imports, annotations, and result type. If that code contradicts this rule (for example a `Bloc` with events, or an SDK imported in a datasource), new code follows this rule and the old code stays as it is unless the request asks to change it.
 
@@ -21,6 +21,7 @@ lib/
 ├── core/
 │   ├── di/
 │   ├── errors/
+│   ├── forms/
 │   ├── network/
 │   ├── services/
 │   └── storage/
@@ -37,6 +38,7 @@ lib/
         │   └── use_cases/
         └── presentation/
             ├── cubit/
+            ├── inputs/
             ├── pages/
             └── widgets/
 ```
@@ -45,20 +47,22 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 
 - `domain/entities`: business objects. No JSON, no Flutter, no HTTP types.
 - `domain/repositories`: abstract contracts. No implementations.
-- `domain/use_cases`: one class per business operation.
+- `domain/use_cases`: one class per business operation, named `<Operation>UseCase` in `<operation>_use_case.dart` (`SignInUseCase` in `sign_in_use_case.dart`).
 - `data/models`: response DTOs and `toEntity()`. JSON stays here.
 - `data/requests`: outbound bodies and query objects. Skip this folder when the feature sends no request-specific type.
 - `data/datasources`: the feature's remote or local calls through core services. Skip a second datasource when one already covers the source.
 - `data/repositories`: implementations of the domain contract.
 - `presentation/cubit`: `Cubit<State>` and its state. No event classes.
+- `presentation/inputs`: `FormzInput` classes used only by this feature.
 - `presentation/pages` and `presentation/widgets`: rendering and user input.
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
+- `core/forms`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
 - `core/network`: the `NetworkService` interface and its impl. Only the impl knows the HTTP client.
 - `core/storage`: storage services, including secure storage and local persistence.
 - `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
 
-Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature.
+Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature. Move a feature input to `core/forms/` when a second feature needs it.
 
 ## Infrastructure packages
 
@@ -89,12 +93,13 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 `BlocBuilder`, `BlocListener`, and `BlocSelector` are allowed on a Cubit. Using them does not allow a `Bloc` subclass.
 
 - Expose methods for user actions (`load`, `signIn`, `submit`).
-- Emit immutable states. Prefer a `sealed class` with `initial`, `loading`, `loaded`, and `failure` when those phases differ.
-- Use Freezed only when the feature needs union types, value equality, or `copyWith` that a sealed class does not already give. Do not add Freezed for a simple state.
+- Emit immutable states. Prefer a `sealed class` with `initial`, `loading`, `loaded`, and `failure` when those phases differ. A form is the exception: it uses one state class with its `FormzInput` fields, `FormzMixin`, and a `FormzSubmissionStatus`, so field values survive loading and failure. Write that class with Freezed when the project uses Freezed, and by hand otherwise. Never use a Freezed union for a form.
+- Use Freezed only when the project already depends on it and the state needs union types, value equality, or `copyWith`. Do not add Freezed to a project that does not use it; write `copyWith` by hand and use `Equatable` when the project uses it.
 - Handle loading, success, and failure. Ignore a repeated submit while a request is in flight when a double submit would matter.
 - A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view.
 - Trigger navigation, dialogs, and snackbars from a `BlocListener`, never from `build()`.
-- `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: text controllers, focus, animations, and local toggles.
+- `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: focus, animations, and local toggles such as showing a password.
+- Form field values live in the Cubit. Use `initialValue` and `onChanged`, not a `TextEditingController`, unless the Cubit must write the text (prefill for editing, clearing, autocomplete).
 
 ## Errors
 
@@ -130,7 +135,9 @@ Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive 
 
 ## Reuse and scope
 
-Keep each business rule, validation, and transformation in one place. Reuse an existing use case, service, helper, widget, or `Failure` before writing a new one. Do not repeat a validation in a Cubit or widget that a use case already enforces.
+Keep each business rule, validation, and transformation in one place. Reuse an existing use case, service, helper, widget, input, or `Failure` before writing a new one.
+
+Field validation (required, format, length) lives in a `FormzInput`. Business validation (account state, server-side policy, rules across entities) lives in the use case. Do not repeat either one in a Cubit, a widget, or the other layer.
 
 Do not add a base Cubit, generic repository, shared helper, or option that the current request does not need. When two pieces of code only look alike but change for different reasons, keep them separate rather than forcing a shared abstraction.
 

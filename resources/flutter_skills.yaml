@@ -141,7 +141,7 @@
     *   Create a directory only when a file is about to live there.
     *   Add an immutable domain entity with no Flutter, JSON, or HTTP types.
     *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>.
-    *   Add one use case per business operation. Skip it only when the operation forwards a single repository call and adds no validation or branching.
+    *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
     *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, or flutter-use-http-package for HTTP.
     *   Put the call in a feature datasource that injects the core service, decodes with fromJson, and maps exceptions to Failure. The datasource is the only place that creates a Failure.
@@ -426,3 +426,26 @@
     - https://pub.dev/packages/injectable
     - https://pub.dev/packages/get_it
     - https://pub.dev/packages/flutter_secure_storage
+- name: flutter-build-form
+  description: Builds a Flutter form with formz inputs, a Cubit, and stateless
+    field widgets, wired to an existing use case. Use when adding a form,
+    adding fields to a form, or changing form validation.
+  examplePrompt: "Add a login form with email and password validation"
+  instructions: |
+    Write a presentation-only form skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    If a fetched page keeps field values in StatefulWidget state or a TextEditingController, or calls a use case from a widget, do not copy that pattern.
+
+    The skill must tell the agent to:
+    *   Read the form from YAML (form, feature, fields with validators, submit use case) or plain language, and ask only when something is unclear.
+    *   Add formz only when pubspec.yaml does not depend on it. Reuse sibling forms and inputs in core/forms/inputs before creating new ones.
+    *   Create one FormzInput per field with an error enum and validator. Put it in presentation/inputs when one feature uses it, or core/forms/inputs when a second feature needs it. Field validation lives only there.
+    *   Add an extension on each error enum that returns the message, using the project's localizations when they exist.
+    *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, not a sealed class.
+    *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, and emits success or failure.
+    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
+    *   Use initialValue and onChanged. Use a TextEditingController only when the Cubit must write the text. Allow setState only for local toggles such as password visibility.
+    *   If the submit use case does not exist, ask before creating domain or data code.
+    *   Test input validators, Cubit transitions, and field widgets with plain values.
+  resources:
+    - https://pub.dev/packages/formz
+    - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/BlocSelector-class.html

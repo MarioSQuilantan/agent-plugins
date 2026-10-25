@@ -19,7 +19,7 @@ Copy this checklist and complete it in order.
 
 - [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/`. No Flutter, JSON, or HTTP types.
 - [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`.
-- [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`. Put validation and branching here. Skip the use case only when the operation forwards a single repository call and adds no rule.
+- [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). Skip the use case only when the operation forwards a single repository call and adds no rule.
 - [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
 - [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
 - [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
@@ -96,68 +96,71 @@ class AuthRepositoryImpl implements AuthRepository {
 }
 ```
 
-Use case with a business rule:
+Use case with a business rule (field checks such as "required" already ran in the form inputs):
 
 ```dart
 @injectable
-class SignIn {
-  SignIn(this._repository);
+class SignInUseCase {
+  SignInUseCase(this._repository);
 
   final AuthRepository _repository;
 
-  TaskEither<Failure, User> call(SignInParams params) {
-    final email = params.email.trim();
-    if (email.isEmpty || params.password.isEmpty) {
-      return TaskEither.left(
-        const ValidationFailure('Email and password are required'),
+  TaskEither<Failure, User> call(SignInParams params) => _repository
+      .signIn(
+        email: params.email.trim().toLowerCase(),
+        password: params.password,
+      )
+      .flatMap(
+        (user) => user.isEmailVerified
+            ? TaskEither.right(user)
+            : TaskEither.left(const EmailNotVerifiedFailure()),
       );
-    }
-    return _repository.signIn(email: email, password: params.password);
-  }
 }
 ```
 
-Cubit and sealed state:
+The sign-in screen has input fields, so its Cubit is the form Cubit in `flutter-build-form`, which calls `SignInUseCase`.
+
+A screen that loads data or performs one action uses a sealed state. For a profile screen backed by a `GetProfileUseCase` that returns `TaskEither<Failure, User>`:
 
 ```dart
-sealed class SignInState {
-  const SignInState();
+sealed class ProfileState {
+  const ProfileState();
 }
 
-class SignInInitial extends SignInState {
-  const SignInInitial();
+class ProfileInitial extends ProfileState {
+  const ProfileInitial();
 }
 
-class SignInLoading extends SignInState {
-  const SignInLoading();
+class ProfileLoading extends ProfileState {
+  const ProfileLoading();
 }
 
-class SignInSuccess extends SignInState {
-  const SignInSuccess(this.user);
+class ProfileLoaded extends ProfileState {
+  const ProfileLoaded(this.user);
   final User user;
 }
 
-class SignInFailure extends SignInState {
-  const SignInFailure(this.failure);
+class ProfileFailure extends ProfileState {
+  const ProfileFailure(this.failure);
   final Failure failure;
 }
 
 @injectable
-class SignInCubit extends Cubit<SignInState> {
-  SignInCubit(this._signIn) : super(const SignInInitial());
+class ProfileCubit extends Cubit<ProfileState> {
+  ProfileCubit(this._getProfileUseCase) : super(const ProfileInitial());
 
-  final SignIn _signIn;
+  final GetProfileUseCase _getProfileUseCase;
 
-  Future<void> submit(SignInParams params) async {
-    if (state is SignInLoading) return;
-    emit(const SignInLoading());
-    final result = await _signIn(params).run();
+  Future<void> load() async {
+    if (state is ProfileLoading) return;
+    emit(const ProfileLoading());
+    final result = await _getProfileUseCase().run();
     result.fold(
-      (failure) => emit(SignInFailure(failure)),
-      (user) => emit(SignInSuccess(user)),
+      (failure) => emit(ProfileFailure(failure)),
+      (user) => emit(ProfileLoaded(user)),
     );
   }
 }
 ```
 
-The page wraps `SignInView` in `BlocProvider(create: (_) => getIt<SignInCubit>())`. `SignInView` renders one branch per sealed state with `BlocBuilder` and reacts to `SignInSuccess` with a `BlocListener` that navigates. Neither calls the repository, the datasource, or a service.
+The page wraps `ProfileView` in `BlocProvider(create: (_) => getIt<ProfileCubit>()..load())`. `ProfileView` renders one branch per sealed state with `BlocBuilder`, and any navigation runs from a `BlocListener`. Neither calls the repository, the datasource, or a service.
