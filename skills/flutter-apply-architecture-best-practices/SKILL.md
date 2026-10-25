@@ -3,7 +3,7 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
+  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
 ---
 # Adding a Flutter Feature
 
@@ -19,7 +19,7 @@ Copy this checklist and complete it in order.
 
 - [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/` with value equality (`Equatable`, or Freezed when the project uses it). No Flutter, JSON, or HTTP types.
 - [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`, except a `watch` method, which returns a `Stream` of entities.
-- [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). Skip the use case only when the operation forwards a single repository call and adds no rule.
+- [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). A failure that only this feature produces extends `Failure` in `domain/failures/`. Skip the use case only when the operation forwards a single repository call and adds no rule.
 - [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
 - [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
 - [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
@@ -42,6 +42,7 @@ lib/features/<feature>/
 │   └── requests/
 ├── domain/
 │   ├── entities/
+│   ├── failures/
 │   ├── repositories/
 │   └── use_cases/
 └── presentation/
@@ -51,7 +52,7 @@ lib/features/<feature>/
     └── widgets/
 ```
 
-The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, failures, and the exception-to-`Failure` helper go in `core/errors/`. `NetworkService` goes in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
+The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`.
 
 Move feature code into `core/` only when two features already use it.
 
@@ -79,7 +80,16 @@ abstract class AuthRepository {
   });
   TaskEither<Failure, Unit> saveSession(AuthSession session);
   TaskEither<Failure, Unit> signOut();
+  TaskEither<Failure, User?> restoreSession();
+  User? get currentUser;
   Stream<User?> watchSession();
+}
+```
+
+```dart
+// features/authentication/domain/failures/email_not_verified_failure.dart
+class EmailNotVerifiedFailure extends Failure {
+  const EmailNotVerifiedFailure();
 }
 ```
 
@@ -133,17 +143,22 @@ abstract final class StorageKeys {
 }
 ```
 
-Repository, which combines both datasources, maps without catching, and publishes the session only after it is saved. It keeps the current user so a late subscriber, such as a lazy session Cubit, still receives the session restored at startup:
+Repository, which combines both datasources, maps without catching, and publishes the session only after it is saved. It exposes the current user synchronously, so the session Cubit starts from the saved session whenever it is created. It also ends the session when `SessionEvents` reports an expired token:
 
 ```dart
 @LazySingleton(as: AuthRepository)
 class AuthRepositoryImpl implements AuthRepository {
-  AuthRepositoryImpl(this._remote, this._local);
+  AuthRepositoryImpl(this._remote, this._local, SessionEvents sessionEvents) {
+    sessionEvents.expired.listen((_) => _expireSession());
+  }
 
   final AuthRemoteDataSource _remote;
   final AuthLocalDataSource _local;
   final _session = StreamController<User?>.broadcast();
   User? _currentUser;
+
+  @override
+  User? get currentUser => _currentUser;
 
   void _publish(User? user) {
     _currentUser = user;
@@ -173,12 +188,16 @@ class AuthRepositoryImpl implements AuthRepository {
       });
 
   @override
-  Stream<User?> watchSession() async* {
-    yield _currentUser;
-    yield* _session.stream;
+  Stream<User?> watchSession() => _session.stream;
+
+  Future<void> _expireSession() async {
+    await _local.deleteToken().run();
+    _publish(null);
   }
 }
 ```
+
+The server already rejected the token, so `_expireSession` ends the session even when deleting the token fails.
 
 Use case with a business rule. In this example `User` also has an `isEmailVerified` field. Field checks such as "required" already ran in the form inputs. The session is saved only when the rule passes, so the router never sees a session that is about to be rejected:
 
@@ -201,7 +220,7 @@ class SignInUseCase {
 
 The sign-in screen has input fields, so its Cubit is the form Cubit in `flutter-build-form`, which calls `SignInUseCase`. It does not navigate on success: the session Cubit changes, and the router redirect in `flutter-setup-declarative-routing` moves the user.
 
-App-wide session Cubit. Watching and signing out forward a single repository call, so it calls the repository directly:
+App-wide session Cubit. Watching, restoring, and signing out each forward a single repository call, so it calls the repository directly:
 
 ```dart
 sealed class SessionState extends Equatable {
@@ -225,18 +244,25 @@ class SessionAuthenticated extends SessionState {
 
 @lazySingleton
 class SessionCubit extends Cubit<SessionState> {
-  SessionCubit(this._repository) : super(const SessionUnauthenticated()) {
-    _subscription = _repository.watchSession().listen(
-          (user) => emit(
-            user == null
-                ? const SessionUnauthenticated()
-                : SessionAuthenticated(user),
-          ),
-        );
+  SessionCubit(this._repository)
+      : super(_stateFor(_repository.currentUser)) {
+    _subscription = _repository
+        .watchSession()
+        .listen((user) => emit(_stateFor(user)));
   }
 
   final AuthRepository _repository;
   late final StreamSubscription<User?> _subscription;
+
+  static SessionState _stateFor(User? user) => user == null
+      ? const SessionUnauthenticated()
+      : SessionAuthenticated(user);
+
+  Future<void> restore() async {
+    final result = await _repository.restoreSession().run();
+    if (isClosed) return;
+    emit(_stateFor(result.getOrElse((_) => null)));
+  }
 
   Future<void> signOut() async {
     final result = await _repository.signOut().run();
@@ -254,7 +280,7 @@ class SessionCubit extends Cubit<SessionState> {
 
 On success the session stream emits `null`. If deleting the token fails, `signOut` still ends the session in memory.
 
-To keep the user signed in across launches, add a `RestoreSessionUseCase` that reads the stored token, loads the user, and publishes the session through the repository. Make `bootstrap` async and await it before `runApp`. When a request fails with `UnauthorizedFailure`, the page's `BlocListener` calls `context.read<SessionCubit>().signOut()`; a Cubit never calls another Cubit.
+`restoreSession` keeps the user signed in across launches. It returns `null` when no token is stored; otherwise it loads the user with the remote datasource and publishes it. `bootstrap` is async and awaits `getIt<SessionCubit>().restore()` before `runApp`, so the first redirect already sees the restored session. A failed restore leaves the user signed out but keeps the token, so an offline launch does not sign the user out; a rejected token is removed through `SessionEvents`. An expired token needs no code in pages or Cubits: `SessionEvents` reaches the repository, the session stream emits `null`, and the router redirect sends the user to `/login`.
 
 A screen that loads data or performs one action uses a sealed state. For a profile screen backed by a `GetProfileUseCase` that returns `TaskEither<Failure, User>`:
 

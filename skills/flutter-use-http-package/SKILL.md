@@ -3,7 +3,7 @@ name: flutter-use-http-package
 description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
+  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
 ---
 # REST Calls Through NetworkService
 
@@ -16,7 +16,7 @@ Do not call the client from a widget, a Cubit, or a datasource. Do not use `Futu
 - [ ] **1. Reuse.** If `core/network/` already has `NetworkService`, use it and skip to step 6. Add a method only when the interface lacks one.
 - [ ] **2. Interface.** Create `NetworkService` with `get`, `post`, `put`, and `delete`. It returns decoded JSON as `Object?` (a map, a list, or `null`) and throws app exceptions.
 - [ ] **3. Exceptions.** Add `ServerException`, `UnauthorizedException`, and `NetworkException` to `core/errors/` when they are missing, and add their cases to the exception-to-`Failure` helper.
-- [ ] **4. Impl.** Implement the interface with the project's client. Translate client errors and non-2xx statuses into app exceptions. Add auth headers here, reading the token from `SecureStorageService` or the project's token provider. Datasources never pass tokens.
+- [ ] **4. Impl.** Implement the interface with the project's client. Translate client errors and non-2xx statuses into app exceptions. Add auth headers here, reading the token from `SecureStorageService` or the project's token provider. Datasources never pass tokens. When a request that carried a token gets a 401, report it on `SessionEvents` before throwing.
 - [ ] **5. Module and platforms.** Register the client in a `@module` under `core/di/`. Add the Android `INTERNET` permission and the macOS `com.apple.security.network.client` entitlement in `DebugProfile.entitlements` and `Release.entitlements` when those targets exist and the entries are missing.
 - [ ] **6. Datasource.** Inject `NetworkService`. Wrap the call, decode with `fromJson`, and map any exception with the helper. Return `Either` or `TaskEither`, matching the nearest feature.
 - [ ] **7. Repository and Cubit.** The repository maps `model.toEntity()` without catching. The use case and the Cubit follow the architecture skill.
@@ -27,6 +27,7 @@ Do not call the client from a widget, a Cubit, or a datasource. Do not use `Futu
 - Build URLs inside the impl from the project's base URL config. Datasources pass a path and query map.
 - Send POST and PUT bodies as `request.toJson()` from a `data/requests` object. The impl encodes JSON and sets `Content-Type` to `application/json; charset=UTF-8`.
 - Treat any 2xx as success. Throw `UnauthorizedException` on 401, `ServerException(statusCode)` on any other non-2xx status, and `NetworkException` on no connection or a timeout.
+- A 401 on a request without a token, such as a wrong password on sign-in, is a normal failure. A 401 on a request with a token means the session expired: call `SessionEvents.reportExpired()` so the auth repository signs out once for the whole app.
 - Return `null` for an empty body. For DELETE, the datasource returns `Right(unit)`.
 - For a large payload, decode in the impl with `compute(jsonDecode, response.body)`.
 
@@ -71,7 +72,74 @@ Failure mapToFailure(Object error, StackTrace stackTrace) => switch (error) {
 
 The signature matches `TaskEither.tryCatch`, so datasources pass `mapToFailure` directly. When the project has a logger or crash reporter, report the unexpected case there before returning `UnexpectedFailure`.
 
-Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none, with value equality (`Equatable`, or Freezed when the project uses it).
+Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none. The base class is `abstract`, not `sealed`, so a feature can add its own failures in `domain/failures/`. Failures have value equality:
+
+```dart
+// core/errors/failures.dart
+abstract class Failure extends Equatable {
+  const Failure();
+
+  @override
+  List<Object?> get props => [];
+}
+
+class NetworkFailure extends Failure {
+  const NetworkFailure();
+}
+
+class UnauthorizedFailure extends Failure {
+  const UnauthorizedFailure();
+}
+
+class SerializationFailure extends Failure {
+  const SerializationFailure();
+}
+
+class ServerFailure extends Failure {
+  const ServerFailure({required this.statusCode});
+  final int statusCode;
+
+  @override
+  List<Object?> get props => [statusCode];
+}
+
+class UnexpectedFailure extends Failure {
+  const UnexpectedFailure({required this.error, required this.stackTrace});
+  final Object error;
+  final StackTrace stackTrace;
+
+  @override
+  List<Object?> get props => [error];
+}
+```
+
+Pages turn a `Failure` into text with one shared extension. A feature matches its own failures first and falls back to it. With localizations, the getter becomes `String message(AppLocalizations l10n)`:
+
+```dart
+// core/errors/failure_message.dart
+extension FailureMessage on Failure {
+  String get message => switch (this) {
+        NetworkFailure() => 'Check your connection and try again',
+        UnauthorizedFailure() => 'Your session expired. Sign in again',
+        ServerFailure() => 'The server could not complete the request',
+        _ => 'Something went wrong',
+      };
+}
+```
+
+`SessionEvents` reports an expired session without making `core/` depend on the auth feature:
+
+```dart
+// core/network/session_events.dart
+@lazySingleton
+class SessionEvents {
+  final _expired = StreamController<void>.broadcast();
+
+  Stream<void> get expired => _expired.stream;
+
+  void reportExpired() => _expired.add(null);
+}
+```
 
 ## Impl with `http`
 
@@ -86,11 +154,17 @@ import 'package:injectable/injectable.dart';
 
 @LazySingleton(as: NetworkService)
 class NetworkServiceImpl implements NetworkService {
-  NetworkServiceImpl(this._client, this._config, this._storage);
+  NetworkServiceImpl(
+    this._client,
+    this._config,
+    this._storage,
+    this._sessionEvents,
+  );
 
   final http.Client _client;
   final AppConfig _config;
   final SecureStorageService _storage;
+  final SessionEvents _sessionEvents;
 
   @override
   Future<Object?> get(String path, {Map<String, String>? query}) =>
@@ -136,7 +210,10 @@ class NetworkServiceImpl implements NetworkService {
       throw const NetworkException();
     }
 
-    if (response.statusCode == 401) throw const UnauthorizedException();
+    if (response.statusCode == 401) {
+      if (token != null) _sessionEvents.reportExpired();
+      throw const UnauthorizedException();
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ServerException(statusCode: response.statusCode);
     }
@@ -160,7 +237,7 @@ abstract class NetworkModule {
 }
 ```
 
-With Dio, keep the same interface. Catch `DioException` in the impl: a response with status 401 becomes `UnauthorizedException`, any other response status becomes `ServerException`, and no response becomes `NetworkException`. Return `response.data`.
+With Dio, keep the same interface. Catch `DioException` in the impl: a response with status 401 becomes `UnauthorizedException`, after reporting on `SessionEvents` when the request carried a token, any other response status becomes `ServerException`, and no response becomes `NetworkException`. Return `response.data`.
 
 ## Datasource
 

@@ -37,6 +37,7 @@ lib/
         │   └── requests/
         ├── domain/
         │   ├── entities/
+        │   ├── failures/
         │   ├── repositories/
         │   └── use_cases/
         └── presentation/
@@ -49,6 +50,7 @@ lib/
 Create a directory only when a file is about to live there. Do not scaffold empty layers.
 
 - `domain/entities`: business objects. No JSON, no Flutter, no HTTP types.
+- `domain/failures`: failures only this feature produces (`EmailNotVerifiedFailure`), extending the core `Failure`. Skip this folder when the feature has none.
 - `domain/repositories`: abstract contracts. No implementations.
 - `domain/use_cases`: one class per business operation, named `<Operation>UseCase` in `<operation>_use_case.dart` (`SignInUseCase` in `sign_in_use_case.dart`).
 - `data/models`: response DTOs and `toEntity()`. JSON stays here.
@@ -61,13 +63,13 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `app`: the root widget, the bootstrap shared by entry points, and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
 - `core/config`: `AppConfig` and its per-flavor implementations (base URL, timeouts, public keys), as described in the Flutter Flavors rule.
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
-- `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
-- `core/forms`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
-- `core/network`: the `NetworkService` interface and its impl. Only the impl knows the HTTP client.
+- `core/errors`: app exceptions, the `abstract` (not `sealed`) `Failure` base so features can extend it, the shared `Failure` types, the exception-to-`Failure` helper, and the `Failure`-to-message extension.
+- `core/forms/inputs`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
+- `core/network`: the `NetworkService` interface, its impl, and `SessionEvents`, which reports an expired session. Only the impl knows the HTTP client.
 - `core/storage`: storage services, including secure storage and local persistence, and the shared storage keys (`StorageKeys`).
 - `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
 
-Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature. Move a feature input to `core/forms/` when a second feature needs it.
+Put code in `core/` only when two features already need it, except core services, which always live in `core/`. Keep everything else inside the feature. Move a feature input to `core/forms/inputs/` when a second feature needs it.
 
 ## Infrastructure packages
 
@@ -102,7 +104,7 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 - States, entities, and `Failure` types have value equality so Cubit tests can compare them. Use Freezed only when the project already depends on it. Otherwise extend `Equatable`, adding `equatable` when the project has neither, and write `copyWith` by hand. Do not add Freezed to a project that does not use it.
 - Handle loading, success, and failure. Ignore a repeated submit while a request is in flight when a double submit would matter.
 - After an `await`, return when `isClosed` is true before calling `emit`.
-- A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view.
+- A page provides its Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view widget that receives state and callbacks. Previews and widget tests target the view. In a form, the stateless field widgets are the views, each rebuilt by its own `BlocSelector`.
 - Trigger navigation, dialogs, and snackbars from a `BlocListener`, never from `build()`.
 - `StatefulWidget` and `setState` are allowed only for UI state that never leaves the widget: focus, animations, and local toggles such as showing a password.
 - Form field values live in the Cubit. Use `initialValue` and `onChanged`, not a `TextEditingController`, unless the Cubit must write the text (prefill for editing, clearing, autocomplete).
@@ -113,15 +115,20 @@ The datasource is the only place that creates a `Failure`. It calls the core ser
 
 The repository does not catch exceptions. It converts the model to an entity (`.map((model) => model.toEntity())`) and may combine datasources or cache.
 
-Use the result type of the nearest feature (`Either` or `TaskEither`). Do not throw for an expected failure (network, validation, not found, unauthorized). Handle both sides of the result. Do not swallow a failure. Do not nest `Either` or `TaskEither`. Do not add a second functional error library.
+An expired session is handled once, not per screen. When a request that carried a token gets a 401, the `NetworkService` impl reports it on `SessionEvents`, and the auth repository deletes the token and publishes a signed-out session. Pages and Cubits do not sign out on `UnauthorizedFailure`.
+
+Presentation turns a `Failure` into text with the shared extension in `core/errors/`. A feature matches its own failures first and falls back to that extension. Do not show raw exceptions or `toString()` to the user.
+
+Use the result type of the nearest feature (`Either` or `TaskEither`). Do not throw for an expected failure (network, validation, not found, unauthorized). Handle both sides of the result. Do not swallow a failure: each one ends in a state or a message, or in a decision the code makes on purpose, such as ending the session locally when deleting the token fails. Do not nest `Either` or `TaskEither`. Do not add a second functional error library.
 
 ## Dependency injection
 
-Register dependencies with `injectable` and resolve them through the project's `getIt` from `core/di/`. Constructor injection only. Do not resolve `getIt` inside a service, datasource, repository, use case, or Cubit. Never call `GetIt.I.register*` by hand.
+Register dependencies with `injectable` and resolve them through the project's `getIt` from `core/di/`. Constructor injection only. Do not resolve `getIt` inside a service, datasource, repository, use case, or Cubit. Never call `GetIt.I.register*` by hand in app code; only an integration test may replace a registration with a fake after the DI setup runs.
 
 Copy the annotation from the nearest registration. When no sample exists, use:
 
 - `@LazySingleton(as: ServiceInterface)` for a core service impl.
+- `@lazySingleton` for a core class that wraps no SDK and has one implementation, such as `SessionEvents`.
 - `@lazySingleton` for a datasource, with no contract. Add a datasource contract only when there are two implementations (remote and local, or one per flavor with `@Environment`) or sibling datasources already have contracts.
 - `@LazySingleton(as: RepositoryContract)` for a repository implementation.
 - `@injectable` for use cases and screen Cubits.

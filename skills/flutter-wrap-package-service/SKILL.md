@@ -3,7 +3,7 @@ name: flutter-wrap-package-service
 description: Wraps an infrastructure package (HTTP client, Firebase, secure storage, image picker, sharing, location, permissions) behind a core service interface and impl registered with injectable. Use when adding, replacing, or using a package that does I/O, calls platform channels, or exposes a vendor API.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
+  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
 ---
 # Wrapping a Package in a Core Service
 
@@ -44,7 +44,7 @@ Match the existing core layout when it differs.
 - Name the service after the capability (`SecureStorageService`, `ImagePickerService`), not the package, unless sibling services use package names.
 - Use the project's `Failure` types. Do not create a `Failure` in the service; the service throws app exceptions and the datasource maps them.
 - Datasources and Cubits never instantiate an SDK (`ImagePicker()`, `FirebaseAuth.instance`, `const FlutterSecureStorage()`).
-- Never call `GetIt.I.register*` by hand.
+- Never call `GetIt.I.register*` by hand in app code.
 - Import each file directly unless the project already uses barrels.
 
 ## Example: secure storage

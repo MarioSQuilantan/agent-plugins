@@ -3,7 +3,7 @@ name: flutter-setup-declarative-routing
 description: Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
 ---
 # Implementing Routing and Deep Linking
 
@@ -127,8 +127,14 @@ class AppRouter {
     redirect: (context, state) {
       final signedIn = _session.state is SessionAuthenticated;
       final atLogin = state.matchedLocation == '/login';
-      if (!signedIn) return atLogin ? null : '/login';
-      if (atLogin) return '/';
+      if (!signedIn) {
+        if (atLogin) return null;
+        final from = state.uri.toString();
+        return from == '/'
+            ? '/login'
+            : Uri(path: '/login', queryParameters: {'from': from}).toString();
+      }
+      if (atLogin) return _safeReturn(state.uri.queryParameters['from']);
       return null;
     },
     routes: [
@@ -136,8 +142,13 @@ class AppRouter {
       GoRoute(path: '/', builder: (context, state) => const HomePage()),
     ],
   );
+
+  static String _safeReturn(String? from) =>
+      from != null && from.startsWith('/') && !from.startsWith('//') ? from : '/';
 }
 ```
+
+The redirect keeps a deep link: a signed-out user who opens `/orders/42` signs in and returns there. `_safeReturn` accepts only an in-app path, so a crafted `from` cannot send the user to another site. `bootstrap` restores the session before `runApp`, so a signed-in user never sees `/login` at startup.
 
 ```dart
 // lib/app/app.dart

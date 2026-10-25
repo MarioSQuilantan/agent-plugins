@@ -38,7 +38,7 @@
         * For scrolling, `integration_test` allows using `tester.scrollUntilVisible` to scroll to a specific item.
         * When working with `flutter_driver` (for migration or specific scenarios), `waitFor` is used to locate widgets, and `waitForAbsent` to ensure a widget is not present. `flutter_driver` also uses `driver.tap` for interactions and `driver.scroll` for scrolling.
         * Add `Key` parameters to widgets, such as `ValueKey('increment')`, to allow finding specific widgets within the test suite.
-        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and register fakes for core services such as `NetworkService` when the test must not reach the real backend.
+        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and, when the test must not reach the real backend, replace a core service such as `NetworkService` with a fake through `getIt.unregister` and `getIt.registerSingleton` after the DI setup runs. That is the only place where code registers a dependency by hand.
 
     5. **Running Integration Tests:**
         * Integration tests can be run on a physical device or emulator using the `flutter drive` command.
@@ -145,7 +145,7 @@
     *   Create a directory only when a file is about to live there.
     *   Add an immutable domain entity with value equality (Equatable, or Freezed when the project uses it) and no Flutter, JSON, or HTTP types.
     *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream of entities.
-    *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, and replays the current user to new subscribers, a SignInUseCase that applies the business rule before saving the session, and an app-wide @lazySingleton SessionCubit that watches the session and signs out. The sign-in form does not navigate; the router redirect does.
+    *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, exposes the current user synchronously, and ends the session when SessionEvents reports an expired token, a SignInUseCase that applies the business rule before saving the session and returns a feature failure from domain/failures, and an app-wide @lazySingleton SessionCubit that starts from the current user, restores the session before runApp, watches the session, and signs out. The sign-in form does not navigate; the router redirect does. Pages never sign out on a 401.
     *   Show a page that provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values.
     *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
@@ -245,6 +245,7 @@
         *   Redirects read an app-wide session Cubit registered as `@lazySingleton`, never a service or repository.
         *   Refresh redirects with `refreshListenable` and a small `Listenable` adapter over the Cubit stream. That adapter is the one allowed `ChangeNotifier`, because it holds no feature state.
         *   Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
+        *   When redirecting a signed-out user to `/login`, keep the requested location in a `from` query parameter, and after sign-in return to it only when it is an in-app path.
   resources:
     - https://docs.flutter.dev/cookbook/animation/page-route-animation
     - https://docs.flutter.dev/cookbook/effects/nested-nav
@@ -381,7 +382,8 @@
     *   Define NetworkService in core/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
     *   Import http, dio, or any other client only in the NetworkService impl and its @module in core/di. The app never knows the client.
     *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService with the shared StorageKeys.accessToken key or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
-    *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl.
+    *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl. When a request that carried a token gets a 401, report it on SessionEvents in core/network so the auth repository ends the session once for the whole app.
+    *   When the project has no Failure types, create an abstract (not sealed) Failure base in core/errors so features can extend it, the shared Failure types, and a FailureMessage extension that pages use as the fallback text for a failure.
     *   Keep the Android INTERNET permission and the macOS com.apple.security.network.client entitlement when those targets exist and the entries are missing.
     *   In the datasource, inject NetworkService, decode with fromJson, and map exceptions to Failure with the helper in core/errors. The helper takes the error and stack trace, so it is passed directly to TaskEither.tryCatch, and it keeps both in UnexpectedFailure. Failure types have value equality. Return Either or TaskEither. For DELETE, return Right(unit).
     *   The repository maps model.toEntity() without catching. The Cubit emits loading, success, and failure. Do not use FutureBuilder for feature data.
@@ -432,7 +434,7 @@
     *   List only the operations the app needs. Reuse an existing core service for the package or capability, and never write a second wrapper.
     *   Create an interface named after the capability that uses app types only, and an impl that is the only file importing the SDK besides its @module in core/di.
     *   Catch SDK exceptions in the impl and throw app exceptions from core/errors. Add each new exception to the exception-to-Failure helper. Do not create a Failure in the service.
-    *   Register the impl with @LazySingleton(as: Interface) unless siblings differ, and register the SDK instance with a @lazySingleton getter in a @module. Never call GetIt.I.register* by hand.
+    *   Register the impl with @LazySingleton(as: Interface) unless siblings differ, and register the SDK instance with a @lazySingleton getter in a @module. Never call GetIt.I.register* by hand in app code.
     *   Inject the interface into the datasource constructor. Datasources, Cubits, and widgets never instantiate an SDK.
     *   Put NetworkService in core/network, storage services in core/storage, and other services in core/services. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
   resources:
@@ -455,7 +457,7 @@
     *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context). An input never reads a BuildContext.
     *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, with value equality, not a sealed class or a Freezed union. Use Freezed only when the project already depends on it; otherwise extend Equatable and write copyWith by hand.
     *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, returns if the Cubit closed while waiting, and emits success or failure.
-    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
+    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Turn the failure into text by matching the feature's own failures first and falling back to the core FailureMessage extension. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
     *   Use initialValue and onChanged. Use a TextEditingController only when the Cubit must write the text. Allow setState only for local toggles such as password visibility.
     *   If the submit use case does not exist, ask before creating domain or data code.
     *   Test input validators, Cubit transitions with blocTest, and field widgets with plain values. Mock the use case with the project's mock library, or mocktail when there is none, and register a fallback value for its params type.
