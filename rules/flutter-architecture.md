@@ -61,7 +61,7 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `presentation/cubit`: `Cubit<State>` and its state. No event classes.
 - `presentation/inputs`: `FormzInput` classes used only by this feature.
 - `presentation/pages` and `presentation/widgets`: rendering and user input.
-- `app`: the root widget, the bootstrap shared by entry points, and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
+- `app`: the root widget, which registers the theme, localizations, and router; the bootstrap shared by entry points; and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
 - `core/config`: `AppConfig` and its per-flavor implementations (base URL, timeouts, public keys), as described in the Flutter Flavors rule.
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, the `abstract` (not `sealed`) `Failure` base so features can extend it, the shared `Failure` types, the exception-to-`Failure` helper, and the `Failure`-to-message extension.

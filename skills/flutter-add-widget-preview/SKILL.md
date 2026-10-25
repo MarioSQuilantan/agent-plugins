@@ -3,7 +3,7 @@ name: flutter-add-widget-preview
 description: Adds interactive widget previews to the project using the previews.dart system. Use when creating new UI components or updating existing screens to ensure consistent design and interactive testing.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 19:30:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Previewing Flutter Widgets
 
@@ -55,9 +55,12 @@ In a project that follows the Flutter Architecture rule, preview the view and fi
 - Pass plain state and no-op callbacks to the view. Do not resolve `getIt`, create a Cubit, or call a service in a preview.
 - The page provides the Cubit from `getIt` and can reach core services that use `dart:io`, which fail in the web-based previewer.
 - Add one preview per state the view renders (loading, loaded, failure).
+- Apply the app theme from `core/theme/` with the `theme` parameter, so text sizes match the app. Add a preview with a large `textScaleFactor` for text that can overflow.
 
 ```dart
-@Preview(name: 'Profile loaded', group: 'Profile')
+PreviewThemeData appPreviewTheme() => PreviewThemeData(materialLight: appTheme);
+
+@Preview(name: 'Profile loaded', group: 'Profile', theme: appPreviewTheme)
 Widget profileLoadedPreview() => ProfileView(
       state: const ProfileLoaded(
         User(id: 1, name: 'Ana', email: 'ana@example.com'),

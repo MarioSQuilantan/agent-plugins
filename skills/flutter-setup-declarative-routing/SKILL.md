@@ -3,7 +3,7 @@ name: flutter-setup-declarative-routing
 description: Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Implementing Routing and Deep Linking
 
@@ -159,11 +159,18 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: getIt<SessionCubit>(),
-      child: MaterialApp.router(routerConfig: getIt<AppRouter>().config),
+      child: MaterialApp.router(
+        theme: appTheme,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: getIt<AppRouter>().config,
+      ),
     );
   }
 }
 ```
+
+`App` is the one place that registers the theme from `core/theme/` (`flutter-apply-responsive-text`), the localizations (`flutter-setup-localization`), and the router. Omit the localization lines when the project has none.
 
 ## Workflow: Configuring Platform Deep Linking
 

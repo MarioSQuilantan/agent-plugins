@@ -3,7 +3,7 @@ name: flutter-apply-responsive-text
 description: Applies the project's typography and keeps text readable in constrained space by choosing between wrapping, maxLines with ellipsis, and bounded shrinking. Use when creating or changing text widgets, fixing text overflow, adding typography styles, or adapting text to screen size and text scaling.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 22:20:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Applying Responsive Text
 
@@ -46,7 +46,12 @@ const appTextTheme = TextTheme(
 );
 ```
 
-`ThemeData(textTheme: appTextTheme)` registers it. When the project prefers short names, a `BuildContext` extension maps them to the theme instead of holding its own constants:
+```dart
+// core/theme/app_theme.dart
+final appTheme = ThemeData(textTheme: appTextTheme);
+```
+
+The root `App` passes `theme: appTheme` to `MaterialApp.router` (`flutter-setup-declarative-routing`), and widget tests and previews use the same `appTheme`. When the project prefers short names, a `BuildContext` extension maps them to the theme instead of holding its own constants:
 
 ```dart
 // core/theme/text_styles.dart
@@ -63,7 +68,7 @@ If the project's extension holds constant styles that ignore the theme, keep usi
 
 ## Fit helper
 
-Use the project's helper when it exists. Add one only when the request asks for shrinking text and none exists. With `auto_size_text`, it passes every relevant `Text` property through, keeps the minimum readable, and aligns to the start:
+Use the project's helper when it exists. Add one only when the request asks for shrinking text and none exists. A short label needs no package: `FittedBox(fit: BoxFit.scaleDown, alignment: AlignmentDirectional.centerStart)`, which keeps it on one line. Add `auto_size_text` only when text with `maxLines` must shrink while it still wraps or ends in an ellipsis. With `auto_size_text`, the helper passes every relevant `Text` property through, keeps the minimum readable, and aligns to the start:
 
 ```dart
 // core/theme/responsive_text.dart
@@ -147,7 +152,7 @@ Text(
 testWidgets('long name does not overflow at 2x text scale', (tester) async {
   await tester.pumpWidget(
     MaterialApp(
-      theme: ThemeData(textTheme: appTextTheme),
+      theme: appTheme,
       home: MediaQuery(
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
         child: Scaffold(

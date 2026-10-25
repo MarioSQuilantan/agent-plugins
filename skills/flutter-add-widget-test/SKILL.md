@@ -3,7 +3,7 @@ name: flutter-add-widget-test
 description: Implement a component-level test using `WidgetTester` to verify UI rendering and user interactions (tapping, scrolling, entering text). Use when validating that a specific widget displays correct data and responds to events as expected.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 18:45:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Writing Flutter Widget Tests
 
@@ -67,6 +67,7 @@ In a project that follows the Flutter Architecture rule, feature state lives in 
 *   **Views and field widgets:** Pump them with plain values and callbacks. No Cubit, no `getIt`.
 *   **Widgets that read a Cubit (a form):** Build the real Cubit with a mocked use case, provide it with `BlocProvider.value`, and close it in `addTearDown`. Use the project's mock library, or `mocktail` when there is none.
 *   Do not resolve `getIt` or call `configureDependencies()` in a widget test.
+*   Pump with `MaterialApp(theme: appTheme)` from `core/theme/`, so text sizes and overflow match the app.
 
 ```dart
 class MockSignInUseCase extends Mock implements SignInUseCase {}
@@ -79,6 +80,7 @@ void main() {
   testWidgets('EmailField shows its error', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: appTheme,
         home: Scaffold(
           body: EmailField(onChanged: (_) {}, errorText: 'Invalid email'),
         ),
@@ -97,6 +99,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: appTheme,
         home: Scaffold(
           body: BlocProvider.value(value: cubit, child: const LoginForm()),
         ),

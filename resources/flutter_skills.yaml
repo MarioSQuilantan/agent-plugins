@@ -123,7 +123,7 @@
     *   For common configurations, extend `MultiPreview` to create a custom annotation. `MultiPreview` also provides a `transform()` method to perform transformations on each preview at runtime.
 
     2. Previews in a Cubit project:
-    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders.
+    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders. Apply the app theme from core/theme with the theme parameter, and add a large textScaleFactor preview for text that can overflow.
 
     3. Interacting with Previews:
     *   As of Flutter 3.38, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
@@ -245,6 +245,7 @@
         *   Redirects read an app-wide session Cubit registered as `@lazySingleton`, never a service or repository.
         *   Refresh redirects with `refreshListenable` and a small `Listenable` adapter over the Cubit stream. That adapter is the one allowed `ChangeNotifier`, because it holds no feature state.
         *   Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
+        *   The root `App` in `app/app.dart` is the one place that registers the theme from `core/theme/`, the localizations when the project has them, and `routerConfig`.
         *   When redirecting a signed-out user to `/login`, keep the requested location in a `from` query parameter, and after sign-in return to it only when it is an in-app path.
   resources:
     - https://docs.flutter.dev/cookbook/animation/page-route-animation
@@ -297,7 +298,7 @@
         *   To handle scrolling, the `WidgetTester` class provides the `scrollUntilVisible()` method, which scrolls until a specific widget is visible. This is useful when the height of items in a list can vary.
     8.  **Rebuild the widget tree after interactions**. Since Flutter doesn't automatically rebuild widgets in the test environment after user interactions update the app's state, you need to call `pump()` or `pumpAndSettle()` methods provided by the `WidgetTester` to ensure the widget tree is rebuilt.
     9.  **Run the tests**. Execute the tests using the command `flutter test test/widget_test.dart` from the root of your project.
-    10. **Test Cubit-backed UI**. In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`. Pump views and field widgets with plain values and callbacks. For a widget that reads a Cubit, build the real Cubit with a use case mocked with the project's mock library (mocktail when there is none), provide it with `BlocProvider.value`, and close it in `addTearDown`. Do not resolve `getIt` or call `configureDependencies()` in a widget test. Any `setState` example only demonstrates the `WidgetTester` API.
+    10. **Test Cubit-backed UI**. In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`. Pump views and field widgets with plain values and callbacks. For a widget that reads a Cubit, build the real Cubit with a use case mocked with the project's mock library (mocktail when there is none), provide it with `BlocProvider.value`, and close it in `addTearDown`. Do not resolve `getIt` or call `configureDependencies()` in a widget test. Pump with `MaterialApp(theme: appTheme)` from `core/theme/` so text sizes and overflow match the app. Any `setState` example only demonstrates the `WidgetTester` API.
 
     A widget test (also known as a component test in other UI frameworks) aims to verify that a single widget's UI looks and interacts as expected. It involves multiple classes and requires a test environment that provides the appropriate widget lifecycle context. Widget tests are more comprehensive than unit tests because the widget being tested can receive user actions, perform layout, and instantiate child widgets. However, like unit tests, the widget test environment is a simpler implementation than a full UI system.
   resources:
@@ -366,6 +367,7 @@
             ```
         
         *   After these steps, Material and Cupertino packages should be correctly localized in the supported locales, and widgets should adapt to localized messages and layout.
+        *   In a project that follows the Flutter Architecture rule, add the delegates and locales to the `MaterialApp.router` in `app/app.dart`, next to the theme and `routerConfig`, instead of creating a second `MaterialApp`.
   resources:
     - https://docs.flutter.dev/ui/internationalization
 - name: flutter-use-http-package
@@ -506,7 +508,7 @@
     *   Fix constraints first: Expanded or Flexible in a Row, a bounded width before any fit behavior. Refer to flutter-fix-layout-issues and flutter-build-responsive-layout for layout errors.
     *   Choose one behavior: wrap paragraphs; maxLines with ellipsis for dynamic values; bounded shrinking only for short labels that must stay whole and short headings. Never shrink below the caption size or 12 logical pixels, and never fix the text scaler.
     *   When the project has no typography, define a TextTheme in core/theme and register it in ThemeData; a BuildContext extension may map short names to that theme.
-    *   Add a fit helper only when shrinking is requested and none exists. With auto_size_text, pass every relevant Text property through (including overflow and key), return Text.rich unchanged, keep a readable minFontSize, and align FittedBox to the start.
+    *   Add a fit helper only when shrinking is requested and none exists. A short label needs only FittedBox with BoxFit.scaleDown; add auto_size_text only when text with maxLines must shrink. Define appTheme in core/theme and use it in App, widget tests, and previews. With auto_size_text, pass every relevant Text property through (including overflow and key), return Text.rich unchanged, keep a readable minFontSize, and align FittedBox to the start.
     *   Report known limits of an existing helper and change shared code only when the request allows it.
     *   Test with a long value, a narrow width, and TextScaler.linear(2), and add a large textScaleFactor preview when the widget has previews.
   resources:
