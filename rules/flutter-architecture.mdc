@@ -58,8 +58,8 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `presentation/cubit`: `Cubit<State>` and its state. No event classes.
 - `presentation/inputs`: `FormzInput` classes used only by this feature.
 - `presentation/pages` and `presentation/widgets`: rendering and user input.
-- `app`: the root widget and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
-- `core/config`: environment config (base URL, timeouts, flavor values).
+- `app`: the root widget, the bootstrap shared by entry points, and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
+- `core/config`: `AppConfig` and its per-flavor implementations (base URL, timeouts, public keys), as described in the Flutter Flavors rule.
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, `Failure` types, and the exception-to-`Failure` helper.
 - `core/forms`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
@@ -138,7 +138,7 @@ Match the import style of the file you are editing. Do not mix a new `package:` 
 
 Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` and the entry page only; it never exports `data/`.
 
-Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. If flavors or `envied` are already configured, use them. Do not add an environment system as part of an unrelated change.
+Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. Environment config and flavors follow the Flutter Flavors rule. Do not add an environment system as part of an unrelated change.
 
 ## Tests
 

@@ -89,7 +89,7 @@ class NetworkServiceImpl implements NetworkService {
   NetworkServiceImpl(this._client, this._config, this._storage);
 
   final http.Client _client;
-  final NetworkConfig _config;
+  final AppConfig _config;
   final SecureStorageService _storage;
 
   @override
@@ -146,7 +146,7 @@ class NetworkServiceImpl implements NetworkService {
 }
 ```
 
-`NetworkConfig` is the project's environment config in `core/config/` (base URL, timeout). Register `http.Client` in a module:
+`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. Register `http.Client` in a module:
 
 ```dart
 // core/di/network_module.dart

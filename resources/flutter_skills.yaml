@@ -375,7 +375,7 @@
     The skill must tell the agent to:
     *   Define NetworkService in core/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
     *   Import http, dio, or any other client only in the NetworkService impl and its @module in core/di. The app never knows the client.
-    *   In the impl, build URLs from the base URL config in core/config, add auth headers from SecureStorageService or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
+    *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
     *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl.
     *   Keep the Android INTERNET permission and the macOS com.apple.security.network.client entitlement when those targets exist and the entries are missing.
     *   In the datasource, inject NetworkService, decode with fromJson, and map exceptions to Failure with the helper in core/errors. The helper takes the error and stack trace, so it is passed directly to TaskEither.tryCatch, and it keeps both in UnexpectedFailure. Failure types have value equality. Return Either or TaskEither. For DELETE, return Right(unit).
@@ -457,3 +457,27 @@
   resources:
     - https://pub.dev/packages/formz
     - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/BlocSelector-class.html
+- name: flutter-setup-flavors
+  description: Sets up environment config with envied, AppConfig, and
+    injectable environments for a single environment, several flavors, or one
+    more flavor such as demo or qa. Use when creating environments, adding or
+    converting flavors, or moving hardcoded config into AppConfig.
+  examplePrompt: "Set up dev, pre, and prod flavors with envied"
+  instructions: |
+    Write a workflow skill for rules/flutter-flavors.mdc and the feature-first architecture in rules/flutter-architecture.mdc.
+    Do not hardcode dev, pre, and prod. Read the environments from the request; if none are given, ask and suggest dev, pre, and prod.
+
+    The skill must tell the agent to:
+    *   Pick one case: a single environment (no native flavors, no --flavor), several flavors from scratch, or adding one flavor without changing the existing ones. Explain how to go from one environment to several.
+    *   Inspect pubspec.yaml, entry points, core/config, core/di, .gitignore, the Android Gradle file, iOS xcconfig files and schemes, and .vscode/launch.json before changing anything.
+    *   Add envied, envied_generator, and build_runner when missing.
+    *   Create one .env.<flavor> file and a committed .example twin per flavor, ignore .env files and generated env files in git, and add one @Envied class per flavor in core/config/env. Obfuscated fields are static final.
+    *   Create an AppConfig class in core/config with one implementation per flavor registered with @LazySingleton(as: AppConfig, env: ['<flavor>']). Shared values live once in AppConfig.
+    *   Make the DI setup take the environment, add a shared bootstrap in app/, and one main_<flavor>.dart per flavor that only calls it.
+    *   Configure Android productFlavors and iOS build configurations, xcconfig files, schemes named after the flavor, and Podfile mappings. List iOS steps for the user when they cannot be verified.
+    *   Run build_runner clean before build, run or build each touched flavor, and report which flavors were verified.
+  resources:
+    - https://docs.flutter.dev/deployment/flavors
+    - https://docs.flutter.dev/deployment/flavors-ios
+    - https://pub.dev/packages/envied
+    - https://pub.dev/packages/injectable
