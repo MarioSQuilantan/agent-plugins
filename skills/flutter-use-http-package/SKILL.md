@@ -3,7 +3,7 @@ name: flutter-use-http-package
 description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
+  last_modified: Sun, 25 Oct 2026 22:05:00 GMT
 ---
 # REST Calls Through NetworkService
 
@@ -279,3 +279,14 @@ class ProductsRemoteDataSource {
 ```
 
 The repository returns `_remote.fetchProducts().map((models) => models.map((m) => m.toEntity()).toList())`. The Cubit emits loading, loaded, or failure, and the page renders them with `BlocBuilder`.
+
+## Token refresh (only when requested)
+
+Skip this section unless the request asks for token refresh or the project already refreshes tokens. Without it, a 401 on a request with a token ends the session through `SessionEvents`.
+
+- Store the refresh token with `StorageKeys.refreshToken` through the auth local datasource, and add it to `AuthSession`.
+- Add `abstract class TokenRefresher { Future<bool> refresh(); }` in `core/network/`. The auth feature implements it in `data/` with `@LazySingleton(as: TokenRefresher)`, so `core/` never imports a feature.
+- In the `NetworkService` impl, on a 401 for a request that carried a token, await one shared refresh and retry the request once with the new token. When the refresh fails, call `SessionEvents.reportExpired()`.
+- Concurrent 401s wait for the same refresh `Future`. With Dio, use a `QueuedInterceptor`.
+- The refresh call itself bypasses this logic (a separate client or a flag), so a failed refresh cannot loop.
+- Test the impl: the refresh succeeds and the request is retried; the refresh fails and the session expires; two concurrent 401s trigger one refresh.

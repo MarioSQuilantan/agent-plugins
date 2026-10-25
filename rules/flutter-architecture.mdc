@@ -117,6 +117,8 @@ The repository does not catch exceptions. It converts the model to an entity (`.
 
 An expired session is handled once, not per screen. When a request that carried a token gets a 401, the `NetworkService` impl reports it on `SessionEvents`, and the auth repository deletes the token and publishes a signed-out session. Pages and Cubits do not sign out on `UnauthorizedFailure`.
 
+Token refresh is opt-in. Add it only when the request asks for it or the project already has it; otherwise a 401 on a request with a token ends the session. When it is requested, follow the token refresh section in `flutter-use-http-package`.
+
 Presentation turns a `Failure` into text with the shared extension in `core/errors/`. A feature matches its own failures first and falls back to that extension. Do not show raw exceptions or `toString()` to the user.
 
 Use the result type of the nearest feature (`Either` or `TaskEither`). Do not throw for an expected failure (network, validation, not found, unauthorized). Handle both sides of the result. Do not swallow a failure: each one ends in a state or a message, or in a decision the code makes on purpose, such as ending the session locally when deleting the token fails. Do not nest `Either` or `TaskEither`. Do not add a second functional error library.
