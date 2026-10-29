@@ -3,13 +3,14 @@ name: flutter-setup-declarative-routing
 description: Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 21:08:03 GMT
+  last_modified: Sun, 25 Oct 2026 22:40:00 GMT
 ---
 # Implementing Routing and Deep Linking
 
 ## Contents
 - [Core Concepts](#core-concepts)
 - [Workflow: Initializing the Application and Router](#workflow-initializing-the-application-and-router)
+- [Workflow: Router in a Clean Architecture Project](#workflow-router-in-a-clean-architecture-project)
 - [Workflow: Configuring Platform Deep Linking](#workflow-configuring-platform-deep-linking)
 - [Workflow: Implementing Nested Navigation](#workflow-implementing-nested-navigation)
 - [Examples](#examples)
@@ -85,6 +86,91 @@ class MyApp extends StatelessWidget {
   }
 }
 ```
+
+## Workflow: Router in a Clean Architecture Project
+
+In a project that follows the Flutter Architecture rule, the router is not a global in `main.dart`:
+
+- Put the route table in `lib/app/router/app_router.dart`. It is the only code outside a feature that imports feature pages.
+- Read auth state from an app-wide session Cubit registered as `@lazySingleton`, never from a service or repository.
+- Refresh redirects with a `Listenable` adapter over the Cubit stream. It is the one allowed `ChangeNotifier`, because it holds no feature state.
+- Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
+
+```dart
+// lib/app/router/stream_listenable.dart
+class StreamListenable extends ChangeNotifier {
+  StreamListenable(Stream<Object?> stream) {
+    _subscription = stream.listen((_) => notifyListeners());
+  }
+
+  late final StreamSubscription<Object?> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}
+```
+
+```dart
+// lib/app/router/app_router.dart
+@lazySingleton
+class AppRouter {
+  AppRouter(this._session);
+
+  final SessionCubit _session;
+
+  late final GoRouter config = GoRouter(
+    initialLocation: '/',
+    refreshListenable: StreamListenable(_session.stream),
+    redirect: (context, state) {
+      final signedIn = _session.state is SessionAuthenticated;
+      final atLogin = state.matchedLocation == '/login';
+      if (!signedIn) {
+        if (atLogin) return null;
+        final from = state.uri.toString();
+        return from == '/'
+            ? '/login'
+            : Uri(path: '/login', queryParameters: {'from': from}).toString();
+      }
+      if (atLogin) return _safeReturn(state.uri.queryParameters['from']);
+      return null;
+    },
+    routes: [
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(path: '/', builder: (context, state) => const HomePage()),
+    ],
+  );
+
+  static String _safeReturn(String? from) =>
+      from != null && from.startsWith('/') && !from.startsWith('//') ? from : '/';
+}
+```
+
+The redirect keeps a deep link: a signed-out user who opens `/orders/42` signs in and returns there. `_safeReturn` accepts only an in-app path, so a crafted `from` cannot send the user to another site. The redirect reads query parameters from `state.uri`, which requires go_router 13.2.0 or later; on an older version, upgrade go_router or redirect to `/login` without `from`. `bootstrap` restores the session before `runApp`, so a signed-in user never sees `/login` at startup.
+
+```dart
+// lib/app/app.dart
+class App extends StatelessWidget {
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider.value(
+      value: getIt<SessionCubit>(),
+      child: MaterialApp.router(
+        theme: appTheme,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        routerConfig: getIt<AppRouter>().config,
+      ),
+    );
+  }
+}
+```
+
+`App` is the one place that registers the theme from `core/theme/` (`flutter-apply-responsive-text`), the localizations (`flutter-setup-localization`), and the router. Omit the localization lines when the project has none.
 
 ## Workflow: Configuring Platform Deep Linking
 

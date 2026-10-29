@@ -3,7 +3,7 @@ name: flutter-add-widget-test
 description: Implement a component-level test using `WidgetTester` to verify UI rendering and user interactions (tapping, scrolling, entering text). Use when validating that a specific widget displays correct data and responds to events as expected.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 21:15:41 GMT
+  last_modified: Sun, 25 Oct 2026 22:50:00 GMT
 ---
 # Writing Flutter Widget Tests
 
@@ -12,6 +12,7 @@ metadata:
 - [Core Components](#core-components)
 - [Workflow: Implementing a Widget Test](#workflow-implementing-a-widget-test)
 - [Interaction & State Management](#interaction--state-management)
+- [Testing Cubit-backed UI](#testing-cubit-backed-ui)
 - [Examples](#examples)
 
 ## Setup & Configuration
@@ -59,7 +60,65 @@ Apply the following conditional logic based on the type of interaction or state 
 *   **If testing text input:** Call `await tester.enterText(textFieldFinder, 'Input string')`.
 *   **If testing items in a dynamic or long list:** Call `await tester.scrollUntilVisible(itemFinder, 500.0, scrollable: listFinder)` to ensure the target widget is rendered before interacting with it.
 
+## Testing Cubit-backed UI
+
+In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`:
+
+*   **Views and field widgets:** Pump them with plain values and callbacks. No Cubit, no `getIt`.
+*   **Widgets that read a Cubit (a form):** Build the real Cubit with a mocked use case, provide it with `BlocProvider.value`, and close it in `addTearDown`. Use the project's mock library, or `mocktail` when there is none.
+*   Do not resolve `getIt` or call `configureDependencies()` in a widget test.
+*   Pump with `MaterialApp(theme: appTheme)` from `core/theme/`, so text sizes and overflow match the app.
+*   `pumpAndSettle` throws "pumpAndSettle timed out" while a repeating animation runs (a loading indicator, a pulse). Use `pump(duration)` there, as in `flutter-add-animation`.
+
+```dart
+class MockSignInUseCase extends Mock implements SignInUseCase {}
+
+void main() {
+  setUpAll(() {
+    registerFallbackValue(const SignInParams(email: '', password: ''));
+  });
+
+  testWidgets('EmailField shows its error', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: EmailField(onChanged: (_) {}, errorText: 'Invalid email'),
+        ),
+      ),
+    );
+
+    expect(find.text('Invalid email'), findsOneWidget);
+  });
+
+  testWidgets('LoginForm submits valid credentials', (tester) async {
+    const user = User(id: 1, name: 'Ana', email: 'ana@example.com');
+    final signInUseCase = MockSignInUseCase();
+    when(() => signInUseCase(any())).thenReturn(TaskEither.right(user));
+    final cubit = LoginCubit(signInUseCase);
+    addTearDown(cubit.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: BlocProvider.value(value: cubit, child: const LoginForm()),
+        ),
+      ),
+    );
+    await tester.enterText(find.byType(TextFormField).first, 'ana@example.com');
+    await tester.enterText(find.byType(TextFormField).last, 'secret123');
+    await tester.tap(find.byType(ElevatedButton));
+    await tester.pumpAndSettle();
+
+    expect(cubit.state.status, FormzSubmissionStatus.success);
+  });
+}
+```
+
 ## Examples
+
+The `TodoList` example keeps its state in `setState` only to show the `WidgetTester` API. Feature code keeps that state in a Cubit.
 
 ### High-Fidelity Widget Test Implementation
 

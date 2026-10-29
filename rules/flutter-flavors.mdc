@@ -1,0 +1,45 @@
+---
+description: "Flutter flavors and environment config with envied: explicit flavor selection, AppConfig in core/config, and secret handling."
+globs: "**/*.dart, **/.env*, android/app/build.gradle*, ios/Flutter/*.xcconfig, ios/Runner.xcodeproj/**, .vscode/launch.json"
+alwaysApply: false
+---
+
+# Flutter Flavors and Environment Config
+
+This rule is the constraint. The skill `flutter-setup-flavors` is the workflow for a single environment, several flavors, or one more flavor. Both follow the Flutter Architecture rule.
+
+Use the flavor names the project already has. Do not create, rename, or remove a flavor unless the request asks for it. Do not assume a flavor exists on both Android and iOS; check the native setup first.
+
+## Flavor selection
+
+- When the project has flavors, each entry point selects its flavor explicitly and passes it to the shared bootstrap in `app/`, which passes it to the DI setup as the `injectable` environment. Entry points contain no other startup code.
+- Never fall back to another flavor when a value or a flavor is missing. Never treat a missing or unknown flavor as production.
+- A production build never reads development or pre-production values.
+- A flavor has the same name in its entry point, its `injectable` environment, its `.env` file, the Android `productFlavors`, the iOS scheme and build configurations, and its `.vscode/launch.json` entry, which runs `--flavor <flavor>` with `lib/main_<flavor>.dart`.
+
+## Configuration in core/config
+
+- The app depends on an `AppConfig` class in `core/config/`: base URLs, public identifiers, environment feature flags, and other non-secret settings.
+- Each flavor has one `AppConfig` implementation registered with `@LazySingleton(as: AppConfig, env: ['<flavor>'])`. A project with a single environment has one implementation without `env`.
+- Only those implementations import the generated `envied` classes. Services, datasources, repositories, use cases, Cubits, and widgets inject `AppConfig` or a service that uses it. They never read an `Env` class, `String.fromEnvironment`, or the flavor name.
+- Do not branch on the flavor (`if (flavor == 'prod')`) outside `core/config/`. Put the difference in `AppConfig`.
+- A value that is the same in every flavor lives once in `AppConfig`, not in every `.env` file.
+
+## envied
+
+- One `.env.<flavor>` file and one `@Envied(path: '.env.<flavor>')` class per flavor in `core/config/env/`. A single environment uses `.env` and one class.
+- Required keys have no default, so a missing key fails generation. Use `optional: true` only for a value that is truly optional.
+- Use `obfuscate: true` for public keys that should not appear as plain text. Obfuscation does not make a value secret.
+- Git ignores every `.env` file except the `.example` files, and the generated `*.g.dart` files in `core/config/env/`, because they contain the values. Each `.env` file has a committed `.example` twin with the same keys and empty values.
+- After changing a `.env` file, run `dart run build_runner clean` before the project's build command; otherwise `build_runner` can keep stale values. Never edit generated env files.
+- CI writes each `.env` file from its secret store before running `build_runner`.
+
+## Secrets
+
+- Anything compiled into the app can be extracted, with or without obfuscation. Never put server credentials, private API keys, database passwords, or signing secrets in a `.env` file the app reads. They belong on a backend.
+- Never commit real values. Never log tokens, keys, or config values.
+- Runtime user credentials go through the secure storage service in `core/storage/`, not through environment config.
+
+## Done
+
+The change is done when each flavor's entry point selects it explicitly, config comes from `AppConfig`, no code outside `core/config/` reads an `Env` class or branches on the flavor, `.env` files and generated env files are ignored with an `.example` committed, and no secret is compiled into the app. State which flavors were built or run, and which could not be.

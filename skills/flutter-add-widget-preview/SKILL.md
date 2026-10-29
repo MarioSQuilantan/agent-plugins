@@ -3,7 +3,7 @@ name: flutter-add-widget-preview
 description: Adds interactive widget previews to the project using the previews.dart system. Use when creating new UI components or updating existing screens to ensure consistent design and interactive testing.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 20:05:23 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Previewing Flutter Widgets
 
@@ -11,6 +11,7 @@ metadata:
 - [Preview Guidelines](#preview-guidelines)
 - [Preview Parameters](#preview-parameters)
 - [Handling Limitations](#handling-limitations)
+- [Previews in a Cubit Project](#previews-in-a-cubit-project)
 - [Workflows](#workflows)
 - [Examples](#examples)
 
@@ -46,6 +47,27 @@ Adhere to the following constraints when authoring previewable widgets, as the W
 - **Public Callbacks:** Ensure all callback arguments provided to preview annotations are public and constant to satisfy code generation requirements.
 - **Constraints:** Apply explicit constraints using the `size` parameter in the `@Preview` annotation if your widget is unconstrained, as unconstrained widgets default to roughly half the viewport.
 - **Build Caching:** The previewer caches builds in a `.widget_preview/` folder in the project root.
+
+## Previews in a Cubit Project
+
+In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page:
+
+- Pass plain state and no-op callbacks to the view. Do not resolve `getIt`, create a Cubit, or call a service in a preview.
+- The page provides the Cubit from `getIt` and can reach core services that use `dart:io`, which fail in the web-based previewer.
+- Add one preview per state the view renders (loading, loaded, failure).
+- Apply the app theme from `core/theme/` with the `theme` parameter, so text sizes match the app. Add a preview with a large `textScaleFactor` for text that can overflow.
+
+```dart
+PreviewThemeData appPreviewTheme() => PreviewThemeData(materialLight: appTheme);
+
+@Preview(name: 'Profile loaded', group: 'Profile', theme: appPreviewTheme)
+Widget profileLoadedPreview() => ProfileView(
+      state: const ProfileLoaded(
+        User(id: 1, name: 'Ana', email: 'ana@example.com'),
+      ),
+      onRetry: () {},
+    );
+```
 
 ## Workflows
 

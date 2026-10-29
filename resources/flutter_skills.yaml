@@ -19,7 +19,7 @@
 
     2. **Interactive Exploration (Flutter Driver MCP)**
         * Once configured, use the `flutter-driver` MCP tools to explore the app:
-            1.  **Launch**: Use `launch_app` with `target: "lib/main_test.dart"`.
+            1.  **Launch**: Use `launch_app` with `target: "lib/main_driver.dart"`. Do not name the driver entry point `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points.
             2.  **Inspect**: Use `get_widget_tree` to find `Key`s, `Text`, or `Type`s.
             3.  **Interact**: Use `tap`, `enter_text`, and `scroll` to execute your flow.
             4.  **Wait**: Always call `waitFor` or check `get_health` if transitions are slow.
@@ -33,11 +33,12 @@
         * Integration tests verify the behavior of the complete app and can be used to validate how individual pieces work together or capture app performance on a real device. They are also known as end-to-end or GUI testing.
         * Use `flutter_test` APIs to write tests in a style similar to widget tests.
         * To verify a widget is displayed, load the main app widget using `tester.pumpWidget` and then use `expect` with `findsOneWidget`.
-        * For user interactions like tapping, use `tester.tap` and then `tester.pumpAndSettle` to wait for UI changes.
+        * For user interactions like tapping, use `tester.tap` and then `tester.pumpAndSettle` to wait for UI changes. While a repeating animation such as a progress indicator is on screen, use `pump(duration)` instead, because `pumpAndSettle` times out.
         * To verify a widget is not displayed, use `expect` with `findsNothing`.
         * For scrolling, `integration_test` allows using `tester.scrollUntilVisible` to scroll to a specific item.
         * When working with `flutter_driver` (for migration or specific scenarios), `waitFor` is used to locate widgets, and `waitForAbsent` to ensure a widget is not present. `flutter_driver` also uses `driver.tap` for interactions and `driver.scroll` for scrolling.
         * Add `Key` parameters to widgets, such as `ValueKey('increment')`, to allow finding specific widgets within the test suite.
+        * If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), reset it with `getIt.reset()` in `tearDown` when several tests set it up, and, when the test must not reach the real backend, register a fake for a core service such as `NetworkService` in a test scope with `getIt.pushNewScope` after the DI setup runs, so it shadows the real registration. That is the only place where code registers a dependency by hand.
 
     5. **Running Integration Tests:**
         * Integration tests can be run on a physical device or emulator using the `flutter drive` command.
@@ -121,63 +122,47 @@
     *   Multiple preview configurations can be created by applying multiple `@Preview` annotations to a single function or constructor.
     *   For common configurations, extend `MultiPreview` to create a custom annotation. `MultiPreview` also provides a `transform()` method to perform transformations on each preview at runtime.
 
-    2. Interacting with Previews:
+    2. Previews in a Cubit project:
+    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders. Apply the app theme from core/theme with the theme parameter, and add a large textScaleFactor preview for text that can overflow.
+
+    3. Interacting with Previews:
     *   As of Flutter 3.38, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
     *   Alternatively, the previewer can be started from the command line by navigating to the Flutter project's root directory and running `flutter widget-preview start`. This command launches a local server and opens a Widget Preview environment in Chrome that updates automatically with project changes.
   resources:
     - https://docs.flutter.dev/tools/widget-previewer
 - name: flutter-apply-architecture-best-practices
-  description: Architects a Flutter application using the recommended layered
-    approach (UI, Logic, Data). Use when structuring a new project or
-    refactoring for scalability.
-  examplePrompt: "Refactor the authentication flow to follow the recommended layered architecture"
+  description: Adds a Flutter feature using feature-first Clean Architecture
+    with Cubit, use cases, FpDart, injectable, and core services. Use when
+    structuring a project, adding a feature, or refactoring state management
+    and layers.
+  examplePrompt: "Add a sign-in feature with a Cubit, use case, and repository"
   instructions: |
-    **1. Understand the Core Principles and Layers:**
-    *   **Separation of Concerns** is the most important principle to follow when designing your Flutter app. This principle makes your code less error-prone by keeping widgets "dumb".
-    *   Flutter applications should be written in **layers**. Layered architecture organizes an application into distinct layers, each with specific roles and responsibilities.
-    *   Typically, applications are separated into 2 to 3 layers, depending on complexity. The three common layers are the UI layer, logic layer, and data layer.
-    *   The Flutter team strongly recommends using clearly defined **data and UI layers**.
-    *   Within each layer, further separate your application by **feature or functionality**. For example, authentication logic should be in a different class than search logic.
+    Write a workflow skill that follows rules/flutter-architecture.mdc.
+    If a fetched page shows Bloc events, ChangeNotifier, ViewModel, Provider, Riverpod, GetX, or a root lib/data + lib/domain + lib/ui layout, do not copy that pattern.
 
-    **2. Structure the UI Layer:**
-    *   The **UI layer** displays data to the user that is exposed by the business logic layer, and handles user interaction. It is also commonly referred to as the 'presentation layer'.
-    *   The UI layer contains separate classes for UI logic and widgets.
-    *   Use **ViewModels and Views** in the UI layer. Views and ViewModels make up the UI layer of an application.
-    *   Implement the **MVVM architectural pattern** (Model-View-ViewModel) in the UI layer. MVVM separates a feature into three parts: Model, ViewModel, and View.
-    *   Write **reusable, lean widgets** that hold as little logic as possible. Do not put logic in widgets.
-    *   Use **ChangeNotifiers and Listenables** to handle widget updates. The ChangeNotifier API is part of the Flutter SDK and is a convenient way for widgets to observe changes in ViewModels.
-
-    **3. Structure the Logic Layer (Optional):**
-    *   The **Logic layer** implements core business logic and facilitates interaction between the data layer and UI layer. It is commonly known as the 'domain layer'.
-    *   This layer is **optional** and only needs to be implemented if your application has complex business logic that happens on the client. Many apps are only concerned with presenting and changing data (CRUD apps).
-
-    **4. Structure the Data Layer:**
-    *   The **data layer** exposes application data to the rest of the app and contains most of the business logic.
-    *   Use the **repository pattern** in the data layer. This pattern isolates data access logic from the rest of the application, creating an abstraction layer between business logic and underlying data storage mechanisms (databases, APIs, file systems, etc.).
-    *   In practice, this means creating **Repository classes and Service classes**.
-    *   Repositories and services represent the data of an application, or the model layer of MVVM.
-    *   Services interact with external APIs, such as client servers and platform plugins.
-
-    **5. Project Organization and Best Practices:**
-    *   A single feature in an application might require a View, a ViewModel, one or more Repositories, and zero or more Services.
-    *   Well-organized code is easier for multiple engineers to work on with minimal code conflicts and is easier for new engineers to navigate and understand.
-    *   These recommendations are guidelines, not steadfast rules, and should be adapted to your unique requirements.
-    *   The Flutter team strongly recommends implementing these practices when starting a new application and strongly considering refactoring existing apps unless it fundamentally clashes with the current approach.
-
+    The skill must tell the agent to:
+    *   Read the nearest feature and copy its folders, names, imports, annotations, and Either or TaskEither type. If that code contradicts the rule, new code follows the rule.
+    *   Create a directory only when a file is about to live there.
+    *   Add an immutable domain entity with value equality (Equatable, or Freezed when the project uses it) and no Flutter, JSON, or HTTP types.
+    *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream of entities.
+    *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, exposes the current user synchronously, and ends the session when SessionEvents reports an expired token, a SignInUseCase that applies the business rule before saving the session and returns a feature failure from domain/failures, and an app-wide @lazySingleton SessionCubit that starts from the current user, restores the session before runApp, watches the session, and signs out. The sign-in form does not navigate; the router redirect does. Pages never sign out on a 401.
+    *   Show a page that provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values.
+    *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
+    *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
+    *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, or flutter-use-http-package for HTTP.
+    *   Put the call in a feature datasource that injects the core service, decodes with fromJson, and maps exceptions to Failure. The datasource is the only place that creates a Failure.
+    *   Implement the repository, map with toEntity, and do not catch exceptions there.
+    *   Add a sealed Cubit state with value equality and a Cubit that calls the use case and emits initial, loading, success, and failure. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the await.
+    *   Provide the Cubit in the page with BlocProvider and getIt, render a view that receives state and callbacks, and trigger navigation, dialogs, and snackbars from a BlocListener.
+    *   Register repository implementations with @LazySingleton(as: Contract), datasources with @lazySingleton, and use cases and Cubits with @injectable. Regenerate injection config. Do not hand-edit generated files.
+    *   Add the page to the existing GoRouter table.
+    *   Test the datasource with a mocked core service, and the use case and Cubit transitions when the behavior can fail or branch. Use the project's mock library; when there is none, add mocktail and bloc_test as dev dependencies and test Cubits with blocTest.
+    *   Organize code under lib/features/<feature>/{data,domain,presentation}. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, NetworkService in core/network, storage services in core/storage, and other services in core/services.
   resources:
-    - https://docs.flutter.dev/app-architecture
-    - https://docs.flutter.dev/app-architecture/case-study
-    - https://docs.flutter.dev/app-architecture/case-study/data-layer
-    - https://docs.flutter.dev/app-architecture/case-study/ui-layer
-    - https://docs.flutter.dev/app-architecture/concepts
-    - https://docs.flutter.dev/app-architecture/design-patterns
-    - https://docs.flutter.dev/app-architecture/guide
-    - https://docs.flutter.dev/app-architecture/recommendations
-    - https://docs.flutter.dev/learn/pathway/how-flutter-works
-    - https://docs.flutter.dev/reference/create-new-app
-    - https://docs.flutter.dev/resources/architectural-overview
-    - https://docs.flutter.dev/resources/faq
-    - https://docs.flutter.dev/ui/layout/tutorial
+    - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/Cubit-class.html
+    - https://pub.dev/packages/fpdart
+    - https://pub.dev/packages/injectable
+    - https://pub.dev/packages/get_it
 - name: flutter-build-responsive-layout
   description: Use `LayoutBuilder`, `MediaQuery`, or `Expanded/Flexible` to
     create a layout that adapts to different screen sizes. Use when you need the
@@ -254,6 +239,14 @@
         *   **For Android:**
             *   Web apps read the deep link path from the URL fragment by default, using the pattern `/#/path/to/app/screen`, but this can be changed by configuring the URL strategy.
             *   To configure your Android application to handle deep links, refer to the deep linking documentation.
+
+    5.  **Router in a Clean Architecture project**:
+        *   Put the route table in `lib/app/router/app_router.dart`, registered with `@lazySingleton`. It is the only code outside a feature that imports feature pages.
+        *   Redirects read an app-wide session Cubit registered as `@lazySingleton`, never a service or repository.
+        *   Refresh redirects with `refreshListenable` and a small `Listenable` adapter over the Cubit stream. That adapter is the one allowed `ChangeNotifier`, because it holds no feature state.
+        *   Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
+        *   The root `App` in `app/app.dart` is the one place that registers the theme from `core/theme/`, the localizations when the project has them, and `routerConfig`.
+        *   When redirecting a signed-out user to `/login`, keep the requested location in a `from` query parameter, and after sign-in return to it only when it is an in-app path. Reading query parameters from `state.uri` in the redirect requires go_router 13.2.0 or later.
   resources:
     - https://docs.flutter.dev/cookbook/animation/page-route-animation
     - https://docs.flutter.dev/cookbook/effects/nested-nav
@@ -305,6 +298,7 @@
         *   To handle scrolling, the `WidgetTester` class provides the `scrollUntilVisible()` method, which scrolls until a specific widget is visible. This is useful when the height of items in a list can vary.
     8.  **Rebuild the widget tree after interactions**. Since Flutter doesn't automatically rebuild widgets in the test environment after user interactions update the app's state, you need to call `pump()` or `pumpAndSettle()` methods provided by the `WidgetTester` to ensure the widget tree is rebuilt.
     9.  **Run the tests**. Execute the tests using the command `flutter test test/widget_test.dart` from the root of your project.
+    10. **Test Cubit-backed UI**. In a project that follows the Flutter Architecture rule, feature state lives in a Cubit, not in `setState`. Pump views and field widgets with plain values and callbacks. For a widget that reads a Cubit, build the real Cubit with a use case mocked with the project's mock library (mocktail when there is none), provide it with `BlocProvider.value`, and close it in `addTearDown`. Do not resolve `getIt` or call `configureDependencies()` in a widget test. Pump with `MaterialApp(theme: appTheme)` from `core/theme/` so text sizes and overflow match the app. Use `pump(duration)` instead of `pumpAndSettle` while a repeating animation runs. Any `setState` example only demonstrates the `WidgetTester` API.
 
     A widget test (also known as a component test in other UI frameworks) aims to verify that a single widget's UI looks and interacts as expected. It involves multiple classes and requires a test environment that provides the appropriate widget lifecycle context. Widget tests are more comprehensive than unit tests because the widget being tested can receive user actions, perform layout, and instantiate child widgets. However, like unit tests, the widget test environment is a simpler implementation than a full UI system.
   resources:
@@ -373,37 +367,29 @@
             ```
         
         *   After these steps, Material and Cupertino packages should be correctly localized in the supported locales, and widgets should adapt to localized messages and layout.
+        *   In a project that follows the Flutter Architecture rule, add the delegates and locales to the `MaterialApp.router` in `app/app.dart`, next to the theme and `routerConfig`, instead of creating a second `MaterialApp`.
   resources:
     - https://docs.flutter.dev/ui/internationalization
 - name: flutter-use-http-package
-  description: Use the `http` package to execute GET, POST, PUT, or DELETE
-    requests. Use when you need to fetch from or send data to a REST API.
-  examplePrompt: "Use the http package to fetch the list of products from the API"
+  description: Calls a REST API through the app's NetworkService and implements
+    that service with http, Dio, or another client. Use when a feature fetches
+    from or sends data to a REST API, or when adding or replacing the HTTP
+    client.
+  examplePrompt: "Fetch the product list from the API through NetworkService and a Cubit"
   instructions: |
-    1.  **Add the `http` package as a dependency**.
-        *   Run `flutter pub add http` in your terminal.
-    2.  **Import the `http` package**.
-        *   Add `import 'package:http/http.dart' as http;` to your Dart file.
-    3.  **Configure platform-specific permissions (if deploying to Android or macOS)**.
-        *   For Android, add the Internet permission to your `AndroidManifest.xml` file: `<uses-permission android:name="android.permission.INTERNET" />`.
-        *   For macOS, include the network client entitlement in `macos/Runner/DebugProfile.entitlements` and `macos/Runner/Release.entitlements` files: `<key>com.apple.security.network.client</key><true/>`.
-    4.  **Make a network request**.
-        *   The `http` package provides methods for GET, POST, PUT, and DELETE operations.
-        *   For example, to make a GET request, use `http.get(Uri.parse('your_url'))`.
-        *   To make a POST request, use `http.post()`.
-        *   To make a PUT request, use `http.put()`.
-        *   You can add authorization headers to your requests using the `headers` parameter. For example: `headers: {HttpHeaders.authorizationHeader: 'Basic your_api_token_here'}`.
-        *   For POST requests, you might need to set `Content-Type` headers and encode the body as JSON.
-    5.  **Handle the response**.
-        *   The `http.Response` object contains the server's response.
-        *   Check the `statusCode` of the response to determine success or failure (e.g., `200 OK` for success, `201 CREATED` for a successful POST).
-        *   Parse the JSON response if applicable.
-        *   Convert the response into a custom Dart object.
-        *   Handle errors by throwing exceptions, especially for non-success status codes, to prevent indefinite loading indicators.
-    6.  **Display the data with Flutter**.
-        *   Use widgets like `FutureBuilder` to display data fetched asynchronously and handle loading and error states.
-        *   For long-running tasks, consider showing a `ProgressIndicator` widget.
-        *   For expensive computations like JSON parsing, perform them in a separate Isolate to avoid UI jank.
+    Write a networking skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    If a fetched page shows FutureBuilder, throwing Exception for a non-200 status, or calling http from a widget or datasource, do not copy that pattern.
+
+    The skill must tell the agent to:
+    *   Define NetworkService in core/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
+    *   Import http, dio, or any other client only in the NetworkService impl and its @module in core/di. The app never knows the client.
+    *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService with the shared StorageKeys.accessToken key or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
+    *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl. When a request that carried a token gets a 401, report it on SessionEvents in core/network so the auth repository ends the session once for the whole app.
+    *   Token refresh is opt-in: add it only when the request asks for it or the project already has it. Then a TokenRefresher interface in core/network, implemented by the auth feature, runs one shared refresh on a 401 for a request that carried a token, retries the request once, and reports SessionEvents when the refresh fails.
+    *   When the project has no Failure types, create an abstract (not sealed) Failure base in core/errors so features can extend it, the shared Failure types, and a FailureMessage extension that pages use as the fallback text for a failure.
+    *   Keep the Android INTERNET permission and the macOS com.apple.security.network.client entitlement when those targets exist and the entries are missing.
+    *   In the datasource, inject NetworkService, decode with fromJson, and map exceptions to Failure with the helper in core/errors. The helper takes the error and stack trace, so it is passed directly to TaskEither.tryCatch, and it keeps both in UnexpectedFailure. Failure types have value equality. Return Either or TaskEither. For DELETE, return Right(unit).
+    *   The repository maps model.toEntity() without catching. The Cubit emits loading, success, and failure. Do not use FutureBuilder for feature data.
   resources:
     - https://docs.flutter.dev/cookbook/networking/authenticated-requests
     - https://docs.flutter.dev/cookbook/networking/background-parsing
@@ -413,18 +399,22 @@
     - https://docs.flutter.dev/cookbook/networking/update-data
     - https://docs.flutter.dev/get-started/fundamentals/networking
 - name: flutter-implement-json-serialization
-  description: Create model classes with `fromJson` and `toJson` methods using
-    `dart:convert`. Use when manually mapping JSON keys to class properties for
-    simple data structures.
-  examplePrompt: "Implement JSON serialization for the User model class"
+  description: Map JSON with dart:convert on data-layer models that expose
+    fromJson, toJson, and toEntity. Use when adding or changing API models.
+    Keep domain entities free of JSON.
+  examplePrompt: "Add a UserModel with fromJson, toJson, and toEntity"
   instructions: |
-    1.  **Import the `dart:convert` library**: Flutter includes a built-in `dart:convert` library that provides a straightforward JSON encoder and decoder. This library allows you to serialize JSON manually.
-    2.  **Define a model class**: Create a plain model class, for example, named `User`. This class will contain the properties that correspond to your JSON structure.
-    3.  **Implement a `fromJson` constructor**: Inside your model class, create a factory constructor, such as `User.fromJson()`, which takes a `Map` structure as input. This constructor is responsible for constructing a new instance of your model class from the JSON map. For example, if you receive a 200 OK response from a server, you can parse the JSON using `jsonDecode(response.body) as Map<String, dynamic>` and then pass it to your `fromJson` constructor.
-    4.  **Implement a `toJson` method**: Add a `toJson()` method to your model class. This method converts an instance of your model class into a `Map`.
-    5.  **Benefits of this approach**: Using model classes with `fromJson` and `toJson` methods provides type safety, autocompletion for fields, and compile-time exceptions. This helps combat issues like typos or incorrect type usage that would otherwise lead to runtime crashes.
-    6.  **Considerations for `jsonDecode()`**: When using `jsonDecode()`, it returns a `dynamic` type, meaning the types of values are not known until runtime.
-    7.  **Testing**: In a production application, it is important to ensure that serialization works correctly by having unit tests in place for both the `User.fromJson()` and `User.toJson()` methods.
+    Write a JSON skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    If a fetched page puts fromJson on the domain entity, throws Exception to the UI for a non-success HTTP status, or uses FutureBuilder, do not copy that pattern.
+
+    The skill must tell the agent to:
+    *   Put fromJson and toJson on a class in features/<feature>/data/models. Name it with a Model suffix. The domain entity has value equality, no JSON methods, and does not import dart:convert. Connect them with toEntity().
+    *   Use manual dart:convert. Do not add json_serializable or Freezed unless the feature already uses that generator.
+    *   NetworkService already decodes the body, so the datasource receives a Map or a List. Cast it before reading fields. Use a switch pattern for a single object so a missing or mistyped field fails in fromJson.
+    *   Keep API key names inside the model. Put an outbound body in data/requests with toJson.
+    *   Map a long list off the UI isolate with compute() and a top-level or static function when mapping causes jank.
+    *   Let fromJson throw FormatException for a malformed payload. The datasource maps FormatException and TypeError to a Failure with the helper in core/errors. The repository and the Cubit never see the exception.
+    *   Add a unit test for fromJson, toJson, and toEntity, including a payload missing a required field.
   resources:
     - https://docs.flutter.dev/cookbook/networking/background-parsing
     - https://docs.flutter.dev/cookbook/networking/fetch-data
@@ -432,3 +422,122 @@
     - https://docs.flutter.dev/cookbook/networking/update-data
     - https://docs.flutter.dev/data-and-backend/serialization
     - https://docs.flutter.dev/data-and-backend/serialization/json
+- name: flutter-wrap-package-service
+  description: Wraps an infrastructure package (HTTP client, Firebase, secure
+    storage, image picker, sharing, location, permissions) behind a core
+    service interface and impl registered with injectable. Use when adding,
+    replacing, or using a package that does I/O, calls platform channels, or
+    exposes a vendor API.
+  examplePrompt: "Add image_picker behind an ImagePickerService"
+  instructions: |
+    Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc.
+
+    The skill must tell the agent to:
+    *   Wrap packages that do I/O, call platform channels, or expose a vendor API. Do not wrap flutter_bloc, go_router, fpdart, injectable, get_it, equatable, formz, meta, collection, intl, freezed_annotation, or json_annotation. Do not wrap envied; only AppConfig implementations in core/config import it.
+    *   List only the operations the app needs. Reuse an existing core service for the package or capability, and never write a second wrapper.
+    *   Create an interface named after the capability that uses app types only, and an impl that is the only file importing the SDK besides its @module in core/di.
+    *   Catch SDK exceptions in the impl and throw app exceptions from core/errors. Add each new exception to the exception-to-Failure helper. Do not create a Failure in the service.
+    *   Register the impl with @LazySingleton(as: Interface) unless siblings differ, and register the SDK instance with a @lazySingleton getter in a @module. Never call GetIt.I.register* by hand in app code.
+    *   Inject the interface into the datasource constructor. Datasources, Cubits, and widgets never instantiate an SDK.
+    *   Put NetworkService in core/network, storage services in core/storage, and other services in core/services. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
+  resources:
+    - https://pub.dev/packages/injectable
+    - https://pub.dev/packages/get_it
+    - https://pub.dev/packages/flutter_secure_storage
+- name: flutter-build-form
+  description: Builds a Flutter form with formz inputs, a Cubit, and stateless
+    field widgets, wired to an existing use case. Use when adding a form,
+    adding fields to a form, or changing form validation.
+  examplePrompt: "Add a login form with email and password validation"
+  instructions: |
+    Write a presentation-only form skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    If a fetched page keeps field values in StatefulWidget state or a TextEditingController, or calls a use case from a widget, do not copy that pattern.
+
+    The skill must tell the agent to:
+    *   Read the form from YAML (form, feature, fields with validators, submit use case) or plain language, and ask only when something is unclear.
+    *   Add formz only when pubspec.yaml does not depend on it. Reuse sibling forms and inputs in core/forms/inputs before creating new ones.
+    *   Create one FormzInput per field with an error enum and validator. Put it in presentation/inputs when one feature uses it, or core/forms/inputs when a second feature needs it. Field validation lives only there.
+    *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context). An input never reads a BuildContext.
+    *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, with value equality, not a sealed class or a Freezed union. Use Freezed only when the project already depends on it; otherwise extend Equatable and write copyWith by hand.
+    *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, returns if the Cubit closed while waiting, and emits success or failure.
+    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Turn the failure into text by matching the feature's own failures first and falling back to the core FailureMessage extension. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
+    *   Use initialValue and onChanged. Use a TextEditingController only when the Cubit must write the text. Allow setState only for local toggles such as password visibility.
+    *   If the submit use case does not exist, ask before creating domain or data code.
+    *   Test input validators, Cubit transitions with blocTest, and field widgets with plain values. Mock the use case with the project's mock library, or mocktail when there is none, and register a fallback value for its params type.
+  resources:
+    - https://pub.dev/packages/formz
+    - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/BlocSelector-class.html
+- name: flutter-setup-flavors
+  description: Sets up environment config with envied, AppConfig, and
+    injectable environments for a single environment, several flavors, or one
+    more flavor such as demo or qa. Use when creating environments, adding or
+    converting flavors, or moving hardcoded config into AppConfig.
+  examplePrompt: "Set up dev, pre, and prod flavors with envied"
+  instructions: |
+    Write a workflow skill for rules/flutter-flavors.mdc and the feature-first architecture in rules/flutter-architecture.mdc.
+    Do not hardcode dev, pre, and prod. Read the environments from the request; if none are given, ask and suggest dev, pre, and prod.
+
+    The skill must tell the agent to:
+    *   Pick one case: a single environment (no native flavors, no --flavor), several flavors from scratch, or adding one flavor without changing the existing ones. Explain how to go from one environment to several.
+    *   Inspect pubspec.yaml, entry points, core/config, core/di, .gitignore, the Android Gradle file, iOS xcconfig files and schemes, and .vscode/launch.json before changing anything.
+    *   Add envied, envied_generator, and build_runner when missing.
+    *   Create one .env.<flavor> file and a committed .example twin per flavor, ignore .env files and generated env files in git, and add one @Envied class per flavor in core/config/env. Obfuscated fields are static final.
+    *   Create an AppConfig class in core/config with one implementation per flavor registered with @LazySingleton(as: AppConfig, env: ['<flavor>']). Shared values live once in AppConfig.
+    *   Make the DI setup take the environment, add a shared bootstrap in app/, and one main_<flavor>.dart per flavor that only calls it.
+    *   Configure Android productFlavors and iOS build configurations, xcconfig files, schemes named after the flavor, and Podfile mappings. List iOS steps for the user when they cannot be verified.
+    *   Create .vscode/launch.json when it is missing, with one entry per flavor that runs --flavor <flavor> with lib/main_<flavor>.dart. When it exists, add only the missing entries. Warn when .gitignore ignores .vscode/.
+    *   Run build_runner clean before build, run or build each touched flavor, and report which flavors were verified.
+  resources:
+    - https://docs.flutter.dev/deployment/flavors
+    - https://docs.flutter.dev/deployment/flavors-ios
+    - https://pub.dev/packages/envied
+    - https://pub.dev/packages/injectable
+- name: flutter-apply-responsive-text
+  description: Applies the project's typography and keeps text readable in
+    constrained space by choosing between wrapping, maxLines with ellipsis, and
+    bounded shrinking. Use when creating or changing text widgets, fixing text
+    overflow, adding typography styles, or adapting text to screen size and
+    text scaling.
+  examplePrompt: "Make the product card title fit two lines without overflowing"
+  instructions: |
+    Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc. Typography and text helpers live in core/theme.
+
+    The skill must tell the agent to:
+    *   Inspect core/theme and the nearest feature for the project's text styles (TextTheme, ThemeExtension, or a BuildContext extension) and any fit helper such as a .responsive() extension, and reuse them. Never hardcode font size, weight, or color in a feature widget.
+    *   Pick the style by the text's role, and add a style only in core/theme when the design needs one that does not exist.
+    *   Fix constraints first: Expanded or Flexible in a Row, a bounded width before any fit behavior. Refer to flutter-fix-layout-issues and flutter-build-responsive-layout for layout errors.
+    *   Choose one behavior: wrap paragraphs; maxLines with ellipsis for dynamic values; bounded shrinking only for short labels that must stay whole and short headings. Never shrink below the caption size or 12 logical pixels, and never fix the text scaler.
+    *   When the project has no typography, define a TextTheme in core/theme and register it in ThemeData; a BuildContext extension may map short names to that theme.
+    *   Add a fit helper only when shrinking is requested and none exists. A short label needs only FittedBox with BoxFit.scaleDown; add auto_size_text only when text with maxLines must shrink. Define appTheme in core/theme and use it in App, widget tests, and previews. With auto_size_text, pass every relevant Text property through (including overflow and key), return Text.rich unchanged, keep a readable minFontSize, and align FittedBox to the start.
+    *   Report known limits of an existing helper and change shared code only when the request allows it.
+    *   Test with a long value, a narrow width, and TextScaler.linear(2), and add a large textScaleFactor preview when the widget has previews.
+  resources:
+    - https://docs.flutter.dev/ui/design/text/typography
+    - https://api.flutter.dev/flutter/material/TextTheme-class.html
+    - https://pub.dev/packages/auto_size_text
+- name: flutter-add-animation
+  description: Adds Flutter animations at the lowest level that works, from
+    implicit widgets to AnimationController, page transitions, Hero, and
+    animated painters, driven by Cubit state and respecting reduced motion.
+    Use when animating a widget, a state change, a list, a route transition, or
+    a custom drawing.
+  examplePrompt: "Animate the profile screen between loading, loaded, and error states"
+  instructions: |
+    Write a workflow skill for the feature-first architecture in rules/flutter-architecture.mdc. Animation state is UI state: an AnimationController lives in a StatefulWidget, never in a Cubit, and the Cubit only decides what to show.
+
+    The skill must tell the agent to:
+    *   Reuse existing motion constants, transition builders, and animation packages before adding anything.
+    *   Pick the lowest level: Animated* widgets (including AnimatedScale, AnimatedRotation, AnimatedSlide), AnimatedSwitcher with a key per state, TweenAnimationBuilder, AnimationController with SingleTickerProviderStateMixin, Interval-based stagger, CustomTransitionPage in GoRouter, Hero, and CustomPainter with repaint plus RepaintBoundary.
+    *   Use theme colors, Durations, and Easing or Curves. Keep UI transitions between 200 and 400 ms.
+    *   Respect MediaQuery.disableAnimationsOf: skip decorative motion, stop repeating animations, and use zero or fade transitions.
+    *   Dispose every AnimationController and CurvedAnimation, create animations in initState rather than build, and never animate with setState from a timer or loop.
+    *   React to Cubit state by passing values to the animated widget and acting in didUpdateWidget, or from the page's BlocListener.
+    *   Make Hero tags unique per route, including the item id.
+    *   Test with pump(duration), never pumpAndSettle while a repeating animation runs, and test reduced motion with hasRunningAnimations.
+  resources:
+    - https://docs.flutter.dev/ui/animations
+    - https://docs.flutter.dev/ui/animations/implicit-animations
+    - https://docs.flutter.dev/ui/animations/staggered-animations
+    - https://docs.flutter.dev/ui/animations/hero-animations
+    - https://api.flutter.dev/flutter/widgets/MediaQuery/disableAnimationsOf.html
+    - https://pub.dev/documentation/go_router/latest/go_router/CustomTransitionPage-class.html

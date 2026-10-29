@@ -3,7 +3,7 @@ name: flutter-setup-localization
 description: Add `flutter_localizations` and `intl` dependencies, enable "generate true" in `pubspec.yaml`, and create an `l10n.yaml` configuration file. Use when initializing localization support for a new Flutter project.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Tue, 21 Apr 2026 21:27:35 GMT
+  last_modified: Sun, 25 Oct 2026 22:35:00 GMT
 ---
 # Internationalizing Flutter Applications
 
@@ -82,6 +82,8 @@ return MaterialApp(
   home: const MyHomePage(),
 );
 ```
+
+In a project that follows the Flutter Architecture rule, the app uses `MaterialApp.router` in `app/app.dart`. Add the delegates and locales there, next to the theme and `routerConfig`, instead of creating a second `MaterialApp`.
 
 ## Implementation Workflow
 

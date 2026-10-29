@@ -1,13 +1,13 @@
 {
-  "name": "dart-flutter",
+  "name": "flutter-clean-architecture",
   "version": "1.0.7",
-  "description": "Official Codex plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase.",
+  "description": "Flutter skills and rules for feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, GoRouter, formz, and envied flavors, plus the Dart MCP server.",
   "author": {
-    "name": "Dart and Flutter",
-    "url": "https://flutter.dev"
+    "name": "MarioSQuilantan",
+    "url": "https://github.com/MarioSQuilantan/agent-plugins"
   },
-  "homepage": "https://github.com/flutter/agent-plugins",
-  "repository": "https://github.com/flutter/agent-plugins",
+  "homepage": "https://github.com/MarioSQuilantan/agent-plugins",
+  "repository": "https://github.com/MarioSQuilantan/agent-plugins",
   "license": "BSD-3-Clause",
   "keywords": [
     "flutter",
@@ -19,16 +19,16 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Dart and Flutter",
-    "shortDescription": "Build and manage Dart and Flutter apps from Codex.",
-    "longDescription": "Use official Dart and Flutter skills and the MCP server to develop apps, run workflows, and manage code from Codex.",
-    "developerName": "Dart and Flutter",
+    "displayName": "Flutter Clean Architecture",
+    "shortDescription": "Build Flutter apps with feature-first Clean Architecture from Codex.",
+    "longDescription": "Flutter skills and rules for feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, GoRouter, formz, and envied flavors, plus the Dart MCP server.",
+    "developerName": "MarioSQuilantan",
     "category": "Developer Tools",
     "capabilities": [
       "Skills",
       "MCP"
     ],
-    "websiteURL": "https://flutter.dev",
+    "websiteURL": "https://github.com/MarioSQuilantan/agent-plugins",
     "composerIcon": "./assets/flutter-icon.svg",
     "logo": "./assets/flutter-logo.png",
     "privacyPolicyURL": "https://policies.google.com/privacy",

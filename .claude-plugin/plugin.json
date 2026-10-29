@@ -1,14 +1,14 @@
 {
-  "name": "dart-flutter",
-  "displayName": "Dart and Flutter",
+  "name": "flutter-clean-architecture",
+  "displayName": "Flutter Clean Architecture",
   "version": "1.0.7",
-  "description": "Official Claude plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
+  "description": "Flutter skills and rules for feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, GoRouter, formz, and envied flavors, plus the Dart MCP server.",
   "author": {
-    "name": "Dart and Flutter",
-    "url": "https://flutter.dev"
+    "name": "MarioSQuilantan",
+    "url": "https://github.com/MarioSQuilantan/agent-plugins"
   },
-  "homepage": "https://github.com/flutter/agent-plugins",
-  "repository": "https://github.com/flutter/agent-plugins",
+  "homepage": "https://github.com/MarioSQuilantan/agent-plugins",
+  "repository": "https://github.com/MarioSQuilantan/agent-plugins",
   "license": "BSD-3-Clause",
   "keywords": [
     "flutter",
