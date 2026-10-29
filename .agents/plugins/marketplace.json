@@ -1,11 +1,11 @@
 {
-  "name": "dart-flutter",
+  "name": "flutter-clean-architecture",
   "interface": {
-    "displayName": "Dart and Flutter"
+    "displayName": "Flutter Clean Architecture"
   },
   "plugins": [
     {
-      "name": "dart-flutter",
+      "name": "flutter-clean-architecture",
       "source": {
         "source": "local",
         "path": "./"

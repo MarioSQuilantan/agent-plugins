@@ -1,14 +1,14 @@
 {
-  "name": "dart-flutter",
+  "name": "flutter-clean-architecture",
   "owner": {
-    "name": "Dart and Flutter Team",
-    "email": "stores@flutter.io"
+    "name": "MarioSQuilantan",
+    "email": "marios0013@outlook.com"
   },
-  "description": "Official Claude Marketplace for Dart and Flutter plugins",
+  "description": "Marketplace for the Flutter Clean Architecture plugin",
   "plugins": [
     {
-      "name": "dart-flutter",
-      "description": "The official Claude plugin for Dart and Flutter that installs Flutter/Dart Skills and Dart MCP server for building natively compiled, visually stunning applications for mobile, web, desktop, and embedded devices from a single codebase",
+      "name": "flutter-clean-architecture",
+      "description": "Flutter skills and rules for feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, GoRouter, formz, and envied flavors, plus the Dart MCP server.",
       "category": "development",
       "tags": [
         "dart",
