@@ -3,13 +3,13 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 22:20:00 GMT
+  last_modified: Fri, 30 Oct 2026 21:00:00 GMT
 ---
 # Adding a Flutter Feature
 
 Follow the Flutter Architecture rule. This skill is the workflow for that rule.
 
-Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, `Bloc` event classes, Provider, Riverpod, or GetX. Do not create a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+Do not introduce `ChangeNotifier`, `ViewModel`, `ListenableBuilder`, `Bloc` event classes, Provider, Riverpod, or GetX. Do not create a root layout of `lib/data` and `lib/domain`. Screens live in `lib/ui/`; business code stays in `features/`.
 
 Read the nearest feature first and copy its folders, names, imports, annotations, and result type (`Either` or `TaskEither`). If that code contradicts the rule, new code follows the rule. Create a directory only when a file is about to live there.
 
@@ -25,7 +25,7 @@ Copy this checklist and complete it in order.
 - [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
 - [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
 - [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the `await`.
-- [ ] **9. UI.** Add a page under `presentation/pages/` that provides the Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and renders a view from `presentation/widgets/`. The view receives state and callbacks. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
+- [ ] **9. UI.** Add the page under `lib/ui/<screen>/`. It may use the Cubits of any feature. Provide this screen's Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and render a view that receives state and callbacks. A widget used only by this screen stays beside the page. Move it to `core/widgets/` when a second page or another widget needs it. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
 - [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, `@injectable` for use cases and screen Cubits, and `@lazySingleton` for an app-wide Cubit such as the session. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
 - [ ] **11. Route.** Add the page to the existing GoRouter table.
 - [ ] **12. Tests.** Test the datasource with a mocked core service, and test the use case and the Cubit transitions when the behavior can fail or branch. Use the mock library already in the project; when there is none, add `mocktail` and `bloc_test` as dev dependencies. Test Cubits with `blocTest`.
@@ -46,15 +46,15 @@ lib/features/<feature>/
 │   ├── repositories/
 │   └── use_cases/
 └── presentation/
-    ├── cubit/
-    ├── inputs/
-    ├── pages/
-    └── widgets/
+    └── cubit/
+lib/ui/<screen>/
+lib/core/forms/inputs/
+lib/core/widgets/
 ```
 
-The root widget and the GoRouter table go in `app/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`. Theme, typography, and text helpers go in `core/theme/` (`flutter-apply-responsive-text`).
+The root widget and the GoRouter table go in `app/`. The router imports pages from `lib/ui/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. Every `FormzInput` goes in `core/forms/inputs/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`. Theme, typography, and text helpers go in `core/theme/` (`flutter-apply-responsive-text`). A widget used by a second page or by another widget goes in `core/widgets/`.
 
-Move feature code into `core/` only when two features already use it.
+Move other feature code into `core/` only when two features already use it. A feature never imports `lib/ui/` or `core/widgets/`.
 
 ## Call chain
 
@@ -336,6 +336,7 @@ class ProfileCubit extends Cubit<ProfileState> {
 ```
 
 ```dart
+// lib/ui/profile/profile_page.dart
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
 

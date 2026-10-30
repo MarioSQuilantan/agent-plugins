@@ -138,7 +138,7 @@
   examplePrompt: "Add a sign-in feature with a Cubit, use case, and repository"
   instructions: |
     Write a workflow skill that follows rules/flutter-architecture.mdc.
-    If a fetched page shows Bloc events, ChangeNotifier, ViewModel, Provider, Riverpod, GetX, or a root lib/data + lib/domain + lib/ui layout, do not copy that pattern.
+    If a fetched page shows Bloc events, ChangeNotifier, ViewModel, Provider, Riverpod, GetX, or a root lib/data + lib/domain layout, do not copy that pattern. Screens live in lib/ui; business code stays in features.
 
     The skill must tell the agent to:
     *   Read the nearest feature and copy its folders, names, imports, annotations, and Either or TaskEither type. If that code contradicts the rule, new code follows the rule.
@@ -146,7 +146,7 @@
     *   Add an immutable domain entity with value equality (Equatable, or Freezed when the project uses it) and no Flutter, JSON, or HTTP types.
     *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream of entities.
     *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, exposes the current user synchronously, and ends the session when SessionEvents reports an expired token, a SignInUseCase that applies the business rule before saving the session and returns a feature failure from domain/failures, and an app-wide @lazySingleton SessionCubit that starts from the current user, restores the session before runApp, watches the session, and signs out. The sign-in form does not navigate; the router redirect does. Pages never sign out on a 401.
-    *   Show a page that provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values.
+    *   Show a page in lib/ui/<screen> that may use the Cubits of any feature. It provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values. A widget used only by that screen stays beside the page; a widget used by a second page or another widget goes in core/widgets and does not import a feature.
     *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
     *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, or flutter-use-http-package for HTTP.
@@ -157,7 +157,7 @@
     *   Register repository implementations with @LazySingleton(as: Contract), datasources with @lazySingleton, and use cases and Cubits with @injectable. Regenerate injection config. Do not hand-edit generated files.
     *   Add the page to the existing GoRouter table.
     *   Test the datasource with a mocked core service, and the use case and Cubit transitions when the behavior can fail or branch. Use the project's mock library; when there is none, add mocktail and bloc_test as dev dependencies and test Cubits with blocTest.
-    *   Organize code under lib/features/<feature>/{data,domain,presentation}. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, NetworkService in core/network, storage services in core/storage, and other services in core/services.
+    *   Organize business code under lib/features/<feature>/{data,domain,presentation}, with presentation holding only the Cubit. Put screens in lib/ui/<screen>, every FormzInput in core/forms/inputs, and a widget used by a second page or another widget in core/widgets. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, NetworkService in core/network, storage services in core/storage, and other services in core/services. A feature never imports lib/ui or core/widgets.
   resources:
     - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/Cubit-class.html
     - https://pub.dev/packages/fpdart
@@ -241,7 +241,7 @@
             *   To configure your Android application to handle deep links, refer to the deep linking documentation.
 
     5.  **Router in a Clean Architecture project**:
-        *   Put the route table in `lib/app/router/app_router.dart`, registered with `@lazySingleton`. It is the only code outside a feature that imports feature pages.
+        *   Put the route table in `lib/app/router/app_router.dart`, registered with `@lazySingleton`. It imports pages from `lib/ui/`, not from a feature.
         *   Redirects read an app-wide session Cubit registered as `@lazySingleton`, never a service or repository.
         *   Refresh redirects with `refreshListenable` and a small `Listenable` adapter over the Cubit stream. That adapter is the one allowed `ChangeNotifier`, because it holds no feature state.
         *   Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
@@ -450,13 +450,13 @@
     adding fields to a form, or changing form validation.
   examplePrompt: "Add a login form with email and password validation"
   instructions: |
-    Write a presentation-only form skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    Write a form skill for the feature-first architecture in rules/flutter-architecture.mdc. The Cubit stays in the feature; the form UI lives in lib/ui.
     If a fetched page keeps field values in StatefulWidget state or a TextEditingController, or calls a use case from a widget, do not copy that pattern.
 
     The skill must tell the agent to:
     *   Read the form from YAML (form, feature, fields with validators, submit use case) or plain language, and ask only when something is unclear.
     *   Add formz only when pubspec.yaml does not depend on it. Reuse sibling forms and inputs in core/forms/inputs before creating new ones.
-    *   Create one FormzInput per field with an error enum and validator. Put it in presentation/inputs when one feature uses it, or core/forms/inputs when a second feature needs it. Field validation lives only there.
+    *   Create one FormzInput per field with an error enum and validator, always in core/forms/inputs. An input is rarely used by only one feature, so never create it inside a feature. Field validation lives only there. The page, form, and field widgets used only by that screen go in lib/ui/<form>. A field widget used by a second screen goes in core/widgets.
     *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context). An input never reads a BuildContext.
     *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, with value equality, not a sealed class or a Freezed union. Use Freezed only when the project already depends on it; otherwise extend Equatable and write copyWith by hand.
     *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, returns if the Cubit closed while waiting, and emits success or failure.

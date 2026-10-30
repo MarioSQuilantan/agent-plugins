@@ -3,11 +3,11 @@ name: flutter-build-form
 description: Builds a Flutter form with formz inputs, a Cubit, and stateless field widgets, wired to an existing use case. Use when adding a form, adding fields to a form, or changing form validation.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 21:00:00 GMT
+  last_modified: Fri, 30 Oct 2026 21:00:00 GMT
 ---
 # Building a Form
 
-Follow the Flutter Architecture rule. This skill covers presentation only. If the submit needs a use case, repository, or datasource that does not exist, ask before creating it, then follow `flutter-apply-architecture-best-practices`.
+Follow the Flutter Architecture rule. This skill covers the form Cubit in the feature and the form UI in `lib/ui/`. If the submit needs a use case, repository, or datasource that does not exist, ask before creating it, then follow `flutter-apply-architecture-best-practices`.
 
 Field values and errors live in the Cubit. Widgets render state and forward input. Do not keep field values in a `StatefulWidget` or a `TextEditingController`, and do not call a use case or repository from a widget.
 
@@ -33,7 +33,7 @@ submit: SignInUseCase
 
 - [ ] **1. Package.** Add `formz` only when `pubspec.yaml` does not already depend on it.
 - [ ] **2. Siblings.** Read existing forms, form Cubits, and inputs. Copy their names, folders, error-text style, and state equality. Reuse `core/forms/inputs/` before creating an input.
-- [ ] **3. Inputs.** Create one `FormzInput<T, E>` per missing field with an error enum and a `validator`. Put it in `presentation/inputs/` when only this feature uses it, or in `core/forms/inputs/` when a second feature needs it. Field validation (required, format, length) lives only here.
+- [ ] **3. Inputs.** Create one `FormzInput<T, E>` per missing field with an error enum and a `validator`, in `core/forms/inputs/`. An input is rarely used by only one feature, so it is never created inside a feature. Field validation (required, format, length) lives only here.
 - [ ] **4. Error text.** Add an extension on each error enum that returns the message. When the project has localizations, the extension takes them as a parameter (`String text(AppLocalizations l10n)`) and the form widget passes `AppLocalizations.of(context)`. An input never reads a `BuildContext`.
 - [ ] **5. State.** One class with the inputs, `FormzMixin`, a `FormzSubmissionStatus`, and the last `Failure`, with value equality. Not a sealed class and not a Freezed union. Write it with Freezed when `pubspec.yaml` already depends on `freezed`; otherwise extend `Equatable` and write `copyWith` by hand. Do not add Freezed for a form.
 - [ ] **6. Cubit.** One method per field change, plus `submit`. `submit` marks every input dirty, stops when `Formz.validate` fails, ignores a call while in progress, sets `inProgress`, runs the use case, returns if the Cubit closed while waiting, and emits `success` or `failure`.
@@ -48,14 +48,15 @@ When adding a field to an existing form, extend the state, the Cubit, and the fo
 ## Layout
 
 ```text
-lib/core/forms/inputs/                  # inputs shared by two or more features
+lib/core/forms/inputs/<field>.dart      # every FormzInput
 lib/features/<feature>/presentation/
   cubit/<form>_cubit.dart
   cubit/<form>_state.dart
-  inputs/<field>.dart                   # inputs used only by this feature
-  pages/<form>_page.dart
-  widgets/<form>_form.dart
-  widgets/<field>_field.dart
+lib/ui/<form>/
+  <form>_page.dart
+  <form>_form.dart
+  <field>_field.dart                    # used only by this screen
+lib/core/widgets/<field>_field.dart     # used by a second screen or widget
 ```
 
 Match existing folder names (`view/`, `screens/`) when siblings use them.

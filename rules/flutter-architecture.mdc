@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Flutter Architecture
 
-This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, `flutter-apply-responsive-text` is the workflow for typography and text that must fit, and `flutter-add-animation` is the workflow for animations. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data`, `lib/domain`, and `lib/ui`.
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, `flutter-apply-responsive-text` is the workflow for typography and text that must fit, and `flutter-add-animation` is the workflow for animations. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data` and `lib/domain`. Screens live in `lib/ui/`; business code stays in `features/`.
 
 Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter. Forms use `formz`; add it only when the project gets its first form.
 
@@ -28,24 +28,24 @@ lib/
 │   ├── network/
 │   ├── services/
 │   ├── storage/
-│   └── theme/
-└── features/
-    └── feature_name/
-        ├── data/
-        │   ├── datasources/
-        │   ├── models/
-        │   ├── repositories/
-        │   └── requests/
-        ├── domain/
-        │   ├── entities/
-        │   ├── failures/
-        │   ├── repositories/
-        │   └── use_cases/
-        └── presentation/
-            ├── cubit/
-            ├── inputs/
-            ├── pages/
-            └── widgets/
+│   ├── theme/
+│   └── widgets/
+├── features/
+│   └── feature_name/
+│       ├── data/
+│       │   ├── datasources/
+│       │   ├── models/
+│       │   ├── repositories/
+│       │   └── requests/
+│       ├── domain/
+│       │   ├── entities/
+│       │   ├── failures/
+│       │   ├── repositories/
+│       │   └── use_cases/
+│       └── presentation/
+│           └── cubit/
+└── ui/
+    └── screen_name/
 ```
 
 Create a directory only when a file is about to live there. Do not scaffold empty layers.
@@ -58,20 +58,20 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `data/requests`: outbound bodies and query objects. Skip this folder when the feature sends no request-specific type.
 - `data/datasources`: the feature's remote or local calls through core services. Skip a second datasource when one already covers the source.
 - `data/repositories`: implementations of the domain contract.
-- `presentation/cubit`: `Cubit<State>` and its state. No event classes.
-- `presentation/inputs`: `FormzInput` classes used only by this feature.
-- `presentation/pages` and `presentation/widgets`: rendering and user input.
-- `app`: the root widget, which registers the theme, localizations, and router; the bootstrap shared by entry points; and, in `app/router/`, the GoRouter table and its redirects. It is the only code outside a feature that imports feature pages. `core/` never imports a feature.
+- `presentation/cubit`: `Cubit<State>` and its state. No event classes. A Cubit is not a screen.
+- `ui/<screen>`: the page and the widgets only that screen uses. A page is not a feature. It may import the Cubits and entities of any feature, and it holds no business rule.
+- `app`: the root widget, which registers the theme, localizations, and router; the bootstrap shared by entry points; and, in `app/router/`, the GoRouter table and its redirects. The router imports pages from `lib/ui/`. `core/` never imports a feature. A feature never imports `lib/ui/` or `core/widgets/`.
 - `core/config`: `AppConfig` and its per-flavor implementations (base URL, timeouts, public keys), as described in the Flutter Flavors rule.
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, the `abstract` (not `sealed`) `Failure` base so features can extend it, the shared `Failure` types, the exception-to-`Failure` helper, and the `Failure`-to-message extension.
-- `core/forms/inputs`: `FormzInput` classes used by two or more features (`Email`, `Password`, `Phone`) and their error-message extensions.
+- `core/forms/inputs`: every `FormzInput` (`Email`, `Password`, `Phone`) and its error-message extension. An input is rarely used by only one feature, so it is never created inside a feature.
 - `core/network`: the `NetworkService` interface, its impl, and `SessionEvents`, which reports an expired session. Only the impl knows the HTTP client.
 - `core/storage`: storage services, including secure storage and local persistence, and the shared storage keys (`StorageKeys`).
 - `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
-- `core/theme`: `ThemeData`, the text theme and its short-name extension, colors, and shared text helpers. Feature widgets read styles from here and never hardcode a font size, weight, or color.
+- `core/theme`: `ThemeData`, the text theme and its short-name extension, colors, and shared text helpers. Widgets read styles from here and never hardcode a font size, weight, or color.
+- `core/widgets`: a widget used by a second page or by another widget. It receives state and callbacks and does not import a feature. The page in `lib/ui/` connects it to the Cubit.
 
-Put code in `core/` only when two features already need it, except core services and the theme, which always live in `core/`. Keep everything else inside the feature. Move a feature input to `core/forms/inputs/` when a second feature needs it.
+Put code in `core/` only when two features already need it, except core services, the theme, and form inputs, which always live in `core/`. Move a widget to `core/widgets/` when a second page or another widget needs it.
 
 ## Infrastructure packages
 
@@ -83,17 +83,19 @@ The service interface uses app types only. SDK types (`Dio`, `Response`, `Docume
 
 Name the service after the capability (`NetworkService`, `SecureStorageService`), not the package, unless sibling services use package names. Expose only the methods the app uses. Reuse an existing service for an SDK; never write a second wrapper.
 
-Architecture and pure-Dart utility packages are imported where their layer allows them: `flutter_bloc` and `go_router` in presentation; `formz` in presentation and `core/forms/`; `envied` only in `core/config/`; `auto_size_text` only in `core/theme/`; `fpdart`, `equatable`, `meta`, and `collection` in any layer; `injectable` annotations on any injectable class; `freezed_annotation` and `json_annotation` where those generators are already used.
+Architecture and pure-Dart utility packages are imported where their layer allows them: `flutter_bloc` and `go_router` in `lib/ui/` and presentation; `formz` in `core/forms/`, presentation Cubits, and `lib/ui/`; `envied` only in `core/config/`; `auto_size_text` only in `core/theme/`; `fpdart`, `equatable`, `meta`, and `collection` in any layer; `injectable` annotations on any injectable class; `freezed_annotation` and `json_annotation` where those generators are already used.
 
 ## Dependency direction
 
 The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. A repository method that watches changes (`watchSession`) returns a `Stream` of entities instead and emits only values that were already saved. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
 
-Domain imports neither `data/` nor `presentation/`, and it does not import Flutter.
+Domain imports neither `data/` nor `presentation/`, and it does not import Flutter or `lib/ui/`.
 
-Data implements domain contracts and maps models to entities. It does not import presentation.
+Data implements domain contracts and maps models to entities. It does not import presentation or `lib/ui/`.
 
-Presentation calls a use case, with one exception: a Cubit may call a repository when the operation forwards a single repository call and adds no validation, branching, or mapping. Any business rule belongs in a use case. Presentation never constructs a service, a datasource, or a repository implementation.
+Presentation calls a use case, with one exception: a Cubit may call a repository when the operation forwards a single repository call and adds no validation, branching, or mapping. Any business rule belongs in a use case. Presentation never constructs a service, a datasource, or a repository implementation, and it does not import `lib/ui/`.
+
+`lib/ui/` may import any feature. A page provides the Cubit and passes state and callbacks to its widgets.
 
 ## Cubit and UI
 
@@ -147,7 +149,7 @@ Use the project's GoRouter setup. Add routes beside the existing route table in 
 
 Match the import style of the file you are editing. Do not mix a new `package:` import style into a feature that uses relative imports, or the reverse.
 
-Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` and the entry page only; it never exports `data/`.
+Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` only; it never exports `data/` or a page. Pages live in `lib/ui/`.
 
 Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. Environment config and flavors follow the Flutter Flavors rule. Do not add an environment system as part of an unrelated change.
 

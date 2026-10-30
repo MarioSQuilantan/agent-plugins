@@ -3,7 +3,7 @@ name: flutter-setup-declarative-routing
 description: Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support.
 metadata:
   model: models/gemini-3.1-pro-preview
-  last_modified: Sun, 25 Oct 2026 22:40:00 GMT
+  last_modified: Fri, 30 Oct 2026 21:00:00 GMT
 ---
 # Implementing Routing and Deep Linking
 
@@ -91,7 +91,7 @@ class MyApp extends StatelessWidget {
 
 In a project that follows the Flutter Architecture rule, the router is not a global in `main.dart`:
 
-- Put the route table in `lib/app/router/app_router.dart`. It is the only code outside a feature that imports feature pages.
+- Put the route table in `lib/app/router/app_router.dart`. It imports pages from `lib/ui/`, not from a feature.
 - Read auth state from an app-wide session Cubit registered as `@lazySingleton`, never from a service or repository.
 - Refresh redirects with a `Listenable` adapter over the Cubit stream. It is the one allowed `ChangeNotifier`, because it holds no feature state.
 - Provide the session Cubit once above `MaterialApp.router` with `BlocProvider.value`.
