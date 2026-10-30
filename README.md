@@ -1,16 +1,24 @@
-# Flutter Agent Plugins
+# Flutter Clean Architecture
 
-Agent plugins for Flutter, maintained by the Flutter team.
+Plugin for Cursor, Claude, and Codex. It teaches an agent to build feature-first Flutter apps: Cubit, use cases, FpDart `Either` and `TaskEither`, `get_it` with `injectable`, GoRouter, formz, and envied flavors. Screens live in `lib/ui/`. Shared widgets live in `core/widgets/`. Every `FormzInput` lives in `core/forms/inputs/`. Infrastructure SDKs stay behind core services.
 
-A collection of plugins designed to extend AI agent capabilities for Flutter development. These plugins bundle together skills, MCP server configuration, and rules to provide tailored workflows and instructions for happy path Flutter development. By giving the agent domain expertise and repeatable workflows, you drastically reduce mistakes and ensure agents reliably complete tasks following best practices.
-
-Plugins can package various customizations together. A key component of these plugins is **Agent Skills**, which are simple folders of files that can be seen as complementary to MCP: where MCP gives an agent access to specialized tools, a Skill teaches the agent “how” to use tools for a specific task.
-
-You can also install the [Dart skills](https://github.com/dart-lang/skills) for Dart tasks.
+Fork of [flutter/agent-plugins](https://github.com/flutter/agent-plugins), maintained by [MarioSQuilantan](https://github.com/MarioSQuilantan/agent-plugins). The rules are `flutter-architecture`, `flutter-flavors`, and `flutter-hot-reload`. The `dart-*` skills are copied from [dart-lang/skills](https://github.com/dart-lang/skills) and are not edited here.
 
 ## Installation
 
-Refer to [Get started developing with AI](https://docs.flutter.dev/ai/get-started) for detailed instructions on how to install the plugins for your preferred agent.
+Install this plugin on its own. Do not keep the official Dart and Flutter plugin (`dart-flutter`) installed at the same time: the skill names match, so the agent would see two copies.
+
+Cursor loads a local plugin from `~/.cursor/plugins/local/<name>/`. Clone this repo and copy it there, then reload the window:
+
+```bash
+git clone https://github.com/MarioSQuilantan/agent-plugins.git
+mkdir -p ~/.cursor/plugins/local
+rsync -a --delete --exclude='.git' agent-plugins/ ~/.cursor/plugins/local/flutter-clean-architecture/
+```
+
+In Cursor Settings, enable **Flutter Clean Architecture**. The Dart MCP server runs `dart mcp-server`, so `dart` must be on your `PATH`.
+
+Claude and Codex use the manifests in `.claude-plugin/` and `.codex-plugin/`. The plugin name in every manifest is `flutter-clean-architecture`.
 
 ## Available Skills
 
@@ -31,11 +39,30 @@ Refer to [Get started developing with AI](https://docs.flutter.dev/ai/get-starte
 | [flutter-setup-localization](skills/flutter-setup-localization/SKILL.md) | Add `flutter_localizations` and `intl` dependencies, enable "generate true" in `pubspec.yaml`, and create an `l10n.yaml` configuration file. Use when initializing localization support for a new Flutter project. | Setup localization and add English and Spanish translations |
 | [flutter-use-http-package](skills/flutter-use-http-package/SKILL.md) | Calls a REST API through the app's `NetworkService` and implements that service with `http`, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client. | Fetch the product list from the API through NetworkService and a Cubit |
 | [flutter-wrap-package-service](skills/flutter-wrap-package-service/SKILL.md) | Wraps an infrastructure package (HTTP client, Firebase, secure storage, image picker, sharing, location, permissions) behind a core service interface and impl registered with injectable. Use when adding, replacing, or using a package that does I/O, calls platform channels, or exposes a vendor API. | Add image_picker behind an ImagePickerService |
+
+## New project
+
+Paste this into a freshly created Flutter app. It adds only the files the app needs to compile. `formz`, `envied`, and `http` are added later, with the first form, flavor, or API call.
+
+```text
+Set up this new Flutter project using the Flutter Architecture rule.
+
+Add flutter_bloc, equatable, fpdart, get_it, injectable, injectable_generator,
+build_runner, and go_router. Add mocktail and bloc_test as dev dependencies.
+
+Create app/bootstrap.dart, main.dart, configureDependencies, the Failure base
+with mapToFailure and FailureMessage, appTheme, the GoRouter table, and a
+HomePage in lib/ui/home. Use one environment and no flavors.
+
+Do not create empty folders or a sample feature. Run build_runner and
+dart analyze, and leave the app compiling.
+```
+
+To start with flavors, add: `Set up dev, pre, and prod flavors with envied.`
+
 ## Contributing
 
-We aren't accepting pull requests at this time, but we would love to hear your feedback! 
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
+Open an issue or a pull request on [MarioSQuilantan/agent-plugins](https://github.com/MarioSQuilantan/agent-plugins). `CONTRIBUTING.md` still describes the upstream Flutter team's process and does not apply to this fork.
 
 ## Code of Conduct
 
