@@ -3,17 +3,17 @@ name: flutter-use-http-package
 description: Calls a REST API through the app's NetworkService and implements that service with http, Dio, or another client. Use when a feature fetches from or sends data to a REST API, or when adding or replacing the HTTP client.
 metadata:
   model: manual
-  last_modified: Sun, 25 Oct 2026 22:05:00 GMT
+  last_modified: Wed, 04 Nov 2026 18:00:00 GMT
 ---
 # REST Calls Through NetworkService
 
-Follow the Flutter Architecture rule. The app knows `NetworkService`, not the HTTP client. Only `core/network/network_service_impl.dart` and its module in `core/di/` import `http`, `dio`, or any other client. Datasources inject `NetworkService` and create the `Failure`.
+Follow the Flutter Architecture rule. The app knows `NetworkService`, not the HTTP client. Only `core/services/network/network_service_impl.dart` and its module in `core/di/` import `http`, `dio`, or any other client. Datasources inject `NetworkService` and create the `Failure`.
 
 Do not call the client from a widget, a Cubit, or a datasource. Do not use `FutureBuilder` for feature data. Do not let `ClientException`, `DioException`, or `SocketException` leave the impl.
 
 ## Workflow
 
-- [ ] **1. Reuse.** If `core/network/` already has `NetworkService`, use it and skip to step 6. Add a method only when the interface lacks one.
+- [ ] **1. Reuse.** If `core/services/network/` already has `NetworkService`, use it and skip to step 6. Add a method only when the interface lacks one.
 - [ ] **2. Interface.** Create `NetworkService` with `get`, `post`, `put`, and `delete`. It returns decoded JSON as `Object?` (a map, a list, or `null`) and throws app exceptions.
 - [ ] **3. Exceptions.** Add `ServerException`, `UnauthorizedException`, and `NetworkException` to `core/errors/` when they are missing, and add their cases to the exception-to-`Failure` helper.
 - [ ] **4. Impl.** Implement the interface with the project's client. Translate client errors and non-2xx statuses into app exceptions. Add auth headers here, reading the token from `SecureStorageService` or the project's token provider. Datasources never pass tokens. When a request that carried a token gets a 401, report it on `SessionEvents` before throwing.
@@ -34,7 +34,7 @@ Do not call the client from a widget, a Cubit, or a datasource. Do not use `Futu
 ## Core: interface, exceptions, and mapping
 
 ```dart
-// core/network/network_service.dart
+// core/services/network/network_service.dart
 abstract class NetworkService {
   Future<Object?> get(String path, {Map<String, String>? query});
   Future<Object?> post(String path, {Object? body});
@@ -130,7 +130,7 @@ extension FailureMessage on Failure {
 `SessionEvents` reports an expired session without making `core/` depend on the auth feature:
 
 ```dart
-// core/network/session_events.dart
+// core/services/network/session_events.dart
 @lazySingleton
 class SessionEvents {
   final _expired = StreamController<void>.broadcast();
@@ -144,7 +144,7 @@ class SessionEvents {
 ## Impl with `http`
 
 ```dart
-// core/network/network_service_impl.dart
+// core/services/network/network_service_impl.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -223,7 +223,7 @@ class NetworkServiceImpl implements NetworkService {
 }
 ```
 
-`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. `StorageKeys` lives in `core/storage/storage_keys.dart`; the auth datasource writes the token with the same key. Register `http.Client` in a module:
+`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. `StorageKeys` lives in `core/services/secure_storage/storage_keys.dart`; the auth datasource writes the token with the same key. Register `http.Client` in a module:
 
 ```dart
 // core/di/network_module.dart
@@ -285,7 +285,7 @@ The repository returns `_remote.fetchProducts().map((models) => models.map((m) =
 Skip this section unless the request asks for token refresh or the project already refreshes tokens. Without it, a 401 on a request with a token ends the session through `SessionEvents`.
 
 - Store the refresh token with `StorageKeys.refreshToken` through the auth local datasource, and add it to `AuthSession`.
-- Add `abstract class TokenRefresher { Future<bool> refresh(); }` in `core/network/`. The auth feature implements it in `data/` with `@LazySingleton(as: TokenRefresher)`, so `core/` never imports a feature.
+- Add `abstract class TokenRefresher { Future<bool> refresh(); }` in `core/services/network/`. The auth feature implements it in `data/` with `@LazySingleton(as: TokenRefresher)`, so `core/` never imports a feature.
 - In the `NetworkService` impl, on a 401 for a request that carried a token, await one shared refresh and retry the request once with the new token. When the refresh fails, call `SessionEvents.reportExpired()`.
 - Concurrent 401s wait for the same refresh `Future`. With Dio, use a `QueuedInterceptor`.
 - The refresh call itself bypasses this logic (a separate client or a flag), so a failed refresh cannot loop.

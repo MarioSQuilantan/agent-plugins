@@ -14,7 +14,7 @@
     },
     {
       "title": "Architecture & Data",
-      "description": "Feature-first architecture, core services, flavors, formz forms, GoRouter, NetworkService, and JSON models.",
+      "description": "Feature-first architecture, core services, flavors, formz forms, GoRouter, NetworkService, local storage with Drift, and JSON models.",
       "skills": [
         "flutter-apply-architecture-best-practices",
         "flutter-wrap-package-service",
@@ -22,6 +22,7 @@
         "flutter-build-form",
         "flutter-setup-declarative-routing",
         "flutter-use-http-package",
+        "flutter-add-local-storage",
         "flutter-implement-json-serialization"
       ]
     },

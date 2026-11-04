@@ -6,7 +6,7 @@ globs: "**/*.dart"
 
 # Flutter Architecture
 
-This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, `flutter-apply-responsive-text` is the workflow for typography and text that must fit, and `flutter-add-animation` is the workflow for animations. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data` and `lib/domain`. Screens live in `lib/ui/`; business code stays in `features/`.
+This rule is the constraint. The skill `flutter-apply-architecture-best-practices` is the workflow for a new feature, `flutter-wrap-package-service` is the workflow for adding an infrastructure package, `flutter-build-form` is the workflow for a form, `flutter-apply-responsive-text` is the workflow for typography and text that must fit, `flutter-add-animation` is the workflow for animations, and `flutter-add-local-storage` is the workflow for preferences and the local database. All of them follow this rule. Do not introduce `ChangeNotifier`, `ViewModel`, or `ListenableBuilder` for feature state, or a root layout of `lib/data` and `lib/domain`. Screens live in `lib/ui/`; business code stays in `features/`.
 
 Feature state is a Cubit. Business operations go through a use case. Datasources, repositories, and use cases return `Either` or `TaskEither`. Infrastructure SDKs sit behind core services. Dependencies are constructor-injected with `get_it` and `injectable`. Navigation is GoRouter. Forms use `formz`; add it only when the project gets its first form.
 
@@ -25,9 +25,8 @@ lib/
 │   ├── di/
 │   ├── errors/
 │   ├── forms/
-│   ├── network/
 │   ├── services/
-│   ├── storage/
+│   │   └── capability_name/
 │   ├── theme/
 │   └── widgets/
 ├── features/
@@ -65,9 +64,7 @@ Create a directory only when a file is about to live there. Do not scaffold empt
 - `core/di`: the injection setup and the `@module` classes that register SDK instances.
 - `core/errors`: app exceptions, the `abstract` (not `sealed`) `Failure` base so features can extend it, the shared `Failure` types, the exception-to-`Failure` helper, and the `Failure`-to-message extension.
 - `core/forms/inputs`: every `FormzInput` (`Email`, `Password`, `Phone`) and its error-message extension. An input is rarely used by only one feature, so it is never created inside a feature.
-- `core/network`: the `NetworkService` interface, its impl, and `SessionEvents`, which reports an expired session. Only the impl knows the HTTP client.
-- `core/storage`: storage services, including secure storage and local persistence, and the shared storage keys (`StorageKeys`).
-- `core/services`: other platform or vendor capabilities (analytics, permissions, image picking, sharing).
+- `core/services/<capability>`: every core service, one folder each (`network/`, `secure_storage/`, `preferences/`, `database/`, `analytics/`, `permissions/`). The folder holds the interface, the impl, and the types only that service uses: `SessionEvents`, which reports an expired session, in `network/`; `StorageKeys` in `secure_storage/`; `PreferenceKeys` in `preferences/`; and the Drift `AppDatabase`, its tables, and `DbTables` in `database/`. A new service always goes here; there is no `core/network/` or `core/storage/`. Only the impl knows the SDK.
 - `core/theme`: `ThemeData`, the text theme and its short-name extension, colors, and shared text helpers. Widgets read styles from here and never hardcode a font size, weight, or color.
 - `core/widgets`: a widget used by a second page or by another widget. It receives state and callbacks and does not import a feature. The page in `lib/ui/` connects it to the Cubit.
 
@@ -75,9 +72,9 @@ Put code in `core/` only when two features already need it, except core services
 
 ## Infrastructure packages
 
-An infrastructure SDK is a package that does I/O, calls platform channels, or exposes a vendor API: HTTP clients (`http`, `dio`), Firebase, `flutter_secure_storage`, `shared_preferences`, `image_picker`, `share_plus`, `geolocator`, `permission_handler`, and similar.
+An infrastructure SDK is a package that does I/O, calls platform channels, or exposes a vendor API: HTTP clients (`http`, `dio`), Firebase, `flutter_secure_storage`, `shared_preferences`, `drift`, `image_picker`, `share_plus`, `geolocator`, `permission_handler`, and similar.
 
-Import an infrastructure SDK only in the impl of its core service (`*_service_impl.dart`) and in the `@module` under `core/di/` that registers it. Features, Cubits, widgets, and domain depend on the service interface. Never create an SDK instance inline (`Dio()`, `FirebaseAuth.instance`, `ImagePicker()`) anywhere else.
+Import an infrastructure SDK only in the impl of its core service (`*_service_impl.dart`) and in the `@module` under `core/di/` that registers it. Features, Cubits, widgets, and domain depend on the service interface. Never create an SDK instance inline (`Dio()`, `FirebaseAuth.instance`, `ImagePicker()`) anywhere else. Drift also generates schema code, so `AppDatabase` and its tables import `package:drift` too; nothing outside `core/services/database/` and its module does, and features reach the database only through `DatabaseService`.
 
 The service interface uses app types only. SDK types (`Dio`, `Response`, `DocumentSnapshot`, `XFile`) and SDK exceptions (`DioException`, `ClientException`, `FirebaseException`) do not cross it. The impl translates SDK errors into app exceptions from `core/errors/`.
 
@@ -87,7 +84,7 @@ Architecture and pure-Dart utility packages are imported where their layer allow
 
 ## Dependency direction
 
-The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. A repository method that watches changes (`watchSession`) returns a `Stream` of entities instead and emits only values that were already saved. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
+The call chain is page → Cubit → use case → repository contract → repository implementation → datasource → core service. Datasources, repositories, and use cases return `Either<Failure, T>` or `TaskEither<Failure, T>`, and the Cubit folds that result into its state. A repository method that watches changes returns a `Stream` instead. `watchSession` emits entities that were already saved. A watch over a source that can fail, such as the database, emits `Either<Failure, T>`, so the datasource still creates the `Failure`. Code examples for each step live in the skill `flutter-apply-architecture-best-practices`.
 
 Domain imports neither `data/` nor `presentation/`, and it does not import Flutter or `lib/ui/`.
 
@@ -115,7 +112,7 @@ Presentation calls a use case, with one exception: a Cubit may call a repository
 
 ## Errors
 
-The datasource is the only place that creates a `Failure`. It calls the core service, decodes with `fromJson`, and maps any exception with the project's helper in `core/errors/` (shown as `mapToFailure` in the skills). If no helper exists, create one there once and reuse it. Do not write a mapping function per feature. The helper keeps the error and stack trace of an unexpected exception in `UnexpectedFailure` and reports it through the project's logger or crash reporter when one exists, so programming errors are not hidden.
+The datasource is the only place that creates a `Failure`. It calls the core service, decodes with `fromJson` (or `fromRow` for a database row), and maps any exception with the project's helper in `core/errors/` (shown as `mapToFailure` in the skills). If no helper exists, create one there once and reuse it. Do not write a mapping function per feature. The helper keeps the error and stack trace of an unexpected exception in `UnexpectedFailure` and reports it through the project's logger or crash reporter when one exists, so programming errors are not hidden.
 
 The repository does not catch exceptions. It converts the model to an entity (`.map((model) => model.toEntity())`) and may combine datasources or cache.
 
@@ -151,7 +148,7 @@ Match the import style of the file you are editing. Do not mix a new `package:` 
 
 Do not create barrel files by default. Add one barrel per feature only when another feature imports it, or follow the project's existing barrel pattern. A feature barrel exports `domain/` only; it never exports `data/` or a page. Pages live in `lib/ui/`.
 
-Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/storage/`. Environment config and flavors follow the Flutter Flavors rule. Do not add an environment system as part of an unrelated change.
+Do not hardcode secrets, tokens, or passwords. Do not log them. Store sensitive local values through the secure storage service in `core/services/secure_storage/`, never in preferences or the database. Environment config and flavors follow the Flutter Flavors rule. Do not add an environment system as part of an unrelated change.
 
 ## Tests
 
@@ -167,4 +164,4 @@ Do not add a base Cubit, generic repository, shared helper, or option that the c
 
 ## Done
 
-The change is done when the new feature code follows the nearest feature, state is a Cubit, business rules sit in a use case, the datasource creates the `Failure`, infrastructure SDKs are imported only in a core service impl or a DI module, and dependencies come from the constructor. Tests cover the new behavior when it can fail or branch. Generated files were regenerated, not edited. The commands that ran, and any that could not run, are stated in the summary.
+The change is done when the new feature code follows the nearest feature, state is a Cubit, business rules sit in a use case, the datasource creates the `Failure`, infrastructure SDKs are imported only in a core service impl or a DI module (Drift also in `core/services/database/`), and dependencies come from the constructor. Tests cover the new behavior when it can fail or branch. Generated files were regenerated, not edited. The commands that ran, and any that could not run, are stated in the summary.

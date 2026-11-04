@@ -3,7 +3,7 @@ name: flutter-apply-architecture-best-practices
 description: Adds a Flutter feature using feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, and core services. Use when structuring a project, adding a feature, or refactoring state management and layers.
 metadata:
   model: manual
-  last_modified: Fri, 30 Oct 2026 21:00:00 GMT
+  last_modified: Wed, 04 Nov 2026 18:00:00 GMT
 ---
 # Adding a Flutter Feature
 
@@ -18,11 +18,11 @@ Read the nearest feature first and copy its folders, names, imports, annotations
 Copy this checklist and complete it in order.
 
 - [ ] **1. Entity.** Add an immutable domain entity under `features/<feature>/domain/entities/` with value equality (`Equatable`, or Freezed when the project uses it). No Flutter, JSON, or HTTP types.
-- [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`, except a `watch` method, which returns a `Stream` of entities.
+- [ ] **2. Contract.** Add an abstract repository under `domain/repositories/`. Every method returns `Either<Failure, T>` or `TaskEither<Failure, T>`, except a `watch` method, which returns a `Stream`: of entities for a value that is already saved (`watchSession`), or of `Either<Failure, T>` when the source can fail, such as the database (`flutter-add-local-storage`).
 - [ ] **3. Use case.** Add one class per business operation under `domain/use_cases/`, named `<Operation>UseCase` in `<operation>_use_case.dart`. Put business rules and branching here; field validation belongs in form inputs (`flutter-build-form`). A failure that only this feature produces extends `Failure` in `domain/failures/`. Skip the use case only when the operation forwards a single repository call and adds no rule.
-- [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`. Add a request type under `data/requests/` only when the call sends its own body or query object.
-- [ ] **5. Core service.** Use the existing core service for the capability (`NetworkService`, `SecureStorageService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, or `flutter-use-http-package` for HTTP.
-- [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
+- [ ] **4. Model.** Add a response model under `data/models/` with `fromJson`, `toJson`, and `toEntity()`, plus `fromRow` and `toRow` when the feature stores it in the database. Add a request type under `data/requests/` only when the call sends its own body or query object.
+- [ ] **5. Core service.** Use the existing core service in `core/services/<capability>/` (`NetworkService`, `SecureStorageService`, `PreferencesService`, `DatabaseService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, `flutter-use-http-package` for HTTP, or `flutter-add-local-storage` for preferences and the database.
+- [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson` or `fromRow`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
 - [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
 - [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the `await`.
 - [ ] **9. UI.** Add the page under `lib/ui/<screen>/`. It may use the Cubits of any feature. Provide this screen's Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and render a view that receives state and callbacks. A widget used only by this screen stays beside the page. Move it to `core/widgets/` when a second page or another widget needs it. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
@@ -49,10 +49,11 @@ lib/features/<feature>/
     └── cubit/
 lib/ui/<screen>/
 lib/core/forms/inputs/
+lib/core/services/<capability>/
 lib/core/widgets/
 ```
 
-The root widget and the GoRouter table go in `app/`. The router imports pages from `lib/ui/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. Every `FormzInput` goes in `core/forms/inputs/`. `NetworkService` and `SessionEvents` go in `core/network/`. Storage services go in `core/storage/`. Other platform or vendor services go in `core/services/`. Theme, typography, and text helpers go in `core/theme/` (`flutter-apply-responsive-text`). A widget used by a second page or by another widget goes in `core/widgets/`.
+The root widget and the GoRouter table go in `app/`. The router imports pages from `lib/ui/`. Environment config goes in `core/config/`. Injection setup and SDK modules go in `core/di/`. Exceptions, the shared failures, the exception-to-`Failure` helper, and the `Failure`-to-message extension go in `core/errors/`. Every `FormzInput` goes in `core/forms/inputs/`. Every core service goes in its own folder under `core/services/`, with the types only it uses: `NetworkService` and `SessionEvents` in `network/`, `SecureStorageService` and `StorageKeys` in `secure_storage/`, `PreferencesService` in `preferences/`, `DatabaseService` and the Drift schema in `database/`. Theme, typography, and text helpers go in `core/theme/` (`flutter-apply-responsive-text`). A widget used by a second page or by another widget goes in `core/widgets/`.
 
 Move other feature code into `core/` only when two features already use it. A feature never imports `lib/ui/` or `core/widgets/`.
 
@@ -93,7 +94,7 @@ class EmailNotVerifiedFailure extends Failure {
 }
 ```
 
-Datasources, the only place that creates a `Failure`. The remote one calls the API; the local one stores the token through `SecureStorageService` with the shared key from `core/storage/storage_keys.dart`:
+Datasources, the only place that creates a `Failure`. The remote one calls the API; the local one stores the token through `SecureStorageService` with the shared key from `core/services/secure_storage/storage_keys.dart`:
 
 ```dart
 @lazySingleton
@@ -137,7 +138,7 @@ class AuthLocalDataSource {
 ```
 
 ```dart
-// core/storage/storage_keys.dart
+// core/services/secure_storage/storage_keys.dart
 abstract final class StorageKeys {
   static const accessToken = 'access_token';
 }

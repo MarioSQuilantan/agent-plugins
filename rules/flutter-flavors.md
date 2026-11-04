@@ -38,7 +38,7 @@ Use the flavor names the project already has. Do not create, rename, or remove a
 
 - Anything compiled into the app can be extracted, with or without obfuscation. Never put server credentials, private API keys, database passwords, or signing secrets in a `.env` file the app reads. They belong on a backend.
 - Never commit real values. Never log tokens, keys, or config values.
-- Runtime user credentials go through the secure storage service in `core/storage/`, not through environment config.
+- Runtime user credentials go through the secure storage service in `core/services/secure_storage/`, not through environment config.
 
 ## Done
 

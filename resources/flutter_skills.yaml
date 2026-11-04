@@ -144,20 +144,20 @@
     *   Read the nearest feature and copy its folders, names, imports, annotations, and Either or TaskEither type. If that code contradicts the rule, new code follows the rule.
     *   Create a directory only when a file is about to live there.
     *   Add an immutable domain entity with value equality (Equatable, or Freezed when the project uses it) and no Flutter, JSON, or HTTP types.
-    *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream of entities.
+    *   Add a repository contract whose methods return Either<Failure, T> or TaskEither<Failure, T>, except a watch method, which returns a Stream: of entities for a value already saved, or of Either<Failure, T> when the source can fail, such as the database.
     *   Show sign-in end to end: a remote datasource that returns the session model, a local datasource that saves the token through SecureStorageService with a shared StorageKeys constant, a repository that combines both, publishes the session on a stream only after it is saved, exposes the current user synchronously, and ends the session when SessionEvents reports an expired token, a SignInUseCase that applies the business rule before saving the session and returns a feature failure from domain/failures, and an app-wide @lazySingleton SessionCubit that starts from the current user, restores the session before runApp, watches the session, and signs out. The sign-in form does not navigate; the router redirect does. Pages never sign out on a 401.
     *   Show a page in lib/ui/<screen> that may use the Cubits of any feature. It provides the Cubit and passes state and callbacks from a BlocBuilder to a stateless view, so previews and widget tests pump the view with plain values. A widget used only by that screen stays beside the page; a widget used by a second page or another widget goes in core/widgets and does not import a feature.
     *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
-    *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, or flutter-use-http-package for HTTP.
-    *   Put the call in a feature datasource that injects the core service, decodes with fromJson, and maps exceptions to Failure. The datasource is the only place that creates a Failure.
+    *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, flutter-use-http-package for HTTP, or flutter-add-local-storage for preferences and the database.
+    *   Put the call in a feature datasource that injects the core service, decodes with fromJson (or fromRow for a database row), and maps exceptions to Failure. The datasource is the only place that creates a Failure.
     *   Implement the repository, map with toEntity, and do not catch exceptions there.
     *   Add a sealed Cubit state with value equality and a Cubit that calls the use case and emits initial, loading, success, and failure. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the await.
     *   Provide the Cubit in the page with BlocProvider and getIt, render a view that receives state and callbacks, and trigger navigation, dialogs, and snackbars from a BlocListener.
     *   Register repository implementations with @LazySingleton(as: Contract), datasources with @lazySingleton, and use cases and Cubits with @injectable. Regenerate injection config. Do not hand-edit generated files.
     *   Add the page to the existing GoRouter table.
     *   Test the datasource with a mocked core service, and the use case and Cubit transitions when the behavior can fail or branch. Use the project's mock library; when there is none, add mocktail and bloc_test as dev dependencies and test Cubits with blocTest.
-    *   Organize business code under lib/features/<feature>/{data,domain,presentation}, with presentation holding only the Cubit. Put screens in lib/ui/<screen>, every FormzInput in core/forms/inputs, and a widget used by a second page or another widget in core/widgets. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, NetworkService in core/network, storage services in core/storage, and other services in core/services. A feature never imports lib/ui or core/widgets.
+    *   Organize business code under lib/features/<feature>/{data,domain,presentation}, with presentation holding only the Cubit. Put screens in lib/ui/<screen>, every FormzInput in core/forms/inputs, and a widget used by a second page or another widget in core/widgets. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, and every core service in its own folder under core/services/<capability> (network, secure_storage, preferences, database, and so on). A feature never imports lib/ui or core/widgets.
   resources:
     - https://pub.dev/documentation/flutter_bloc/latest/flutter_bloc/Cubit-class.html
     - https://pub.dev/packages/fpdart
@@ -381,11 +381,11 @@
     If a fetched page shows FutureBuilder, throwing Exception for a non-200 status, or calling http from a widget or datasource, do not copy that pattern.
 
     The skill must tell the agent to:
-    *   Define NetworkService in core/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
+    *   Define NetworkService in core/services/network with get, post, put, and delete that return decoded JSON as Object? and throw app exceptions. Reuse it when it exists.
     *   Import http, dio, or any other client only in the NetworkService impl and its @module in core/di. The app never knows the client.
     *   In the impl, build URLs from AppConfig in core/config, add auth headers from SecureStorageService with the shared StorageKeys.accessToken key or the project's token provider, encode JSON bodies (send no body when it is null), and set Content-Type to application/json; charset=UTF-8.
-    *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl. When a request that carried a token gets a 401, report it on SessionEvents in core/network so the auth repository ends the session once for the whole app.
-    *   Token refresh is opt-in: add it only when the request asks for it or the project already has it. Then a TokenRefresher interface in core/network, implemented by the auth feature, runs one shared refresh on a 401 for a request that carried a token, retries the request once, and reports SessionEvents when the refresh fails.
+    *   Treat any 2xx as success. Throw UnauthorizedException on 401, ServerException(statusCode) on other non-2xx statuses, and NetworkException on no connection or a timeout. No client exception leaves the impl. When a request that carried a token gets a 401, report it on SessionEvents in core/services/network so the auth repository ends the session once for the whole app.
+    *   Token refresh is opt-in: add it only when the request asks for it or the project already has it. Then a TokenRefresher interface in core/services/network, implemented by the auth feature, runs one shared refresh on a 401 for a request that carried a token, retries the request once, and reports SessionEvents when the refresh fails.
     *   When the project has no Failure types, create an abstract (not sealed) Failure base in core/errors so features can extend it, the shared Failure types, and a FailureMessage extension that pages use as the fallback text for a failure.
     *   Keep the Android INTERNET permission and the macOS com.apple.security.network.client entitlement when those targets exist and the entries are missing.
     *   In the datasource, inject NetworkService, decode with fromJson, and map exceptions to Failure with the helper in core/errors. The helper takes the error and stack trace, so it is passed directly to TaskEither.tryCatch, and it keeps both in UnexpectedFailure. Failure types have value equality. Return Either or TaskEither. For DELETE, return Right(unit).
@@ -398,6 +398,35 @@
     - https://docs.flutter.dev/cookbook/networking/send-data
     - https://docs.flutter.dev/cookbook/networking/update-data
     - https://docs.flutter.dev/get-started/fundamentals/networking
+- name: flutter-add-local-storage
+  description: Stores data on the device through core services, with flat
+    preferences behind PreferencesService (shared_preferences) and relational
+    or cached data behind DatabaseService (Drift), and secrets in
+    SecureStorageService. Use when persisting settings, caching API data,
+    building offline-first features, adding a table, or writing a database
+    migration.
+  examplePrompt: "Cache the todo list in Drift and show it offline through a Cubit"
+  instructions: |
+    Write a local storage skill for the feature-first architecture in rules/flutter-architecture.mdc.
+    If a fetched page uses the legacy SharedPreferences API, Hive, a repository that calls the SDK directly, or a StreamBuilder over the database in a widget, do not copy that pattern.
+
+    The skill must tell the agent to:
+    *   Choose the store: secrets in SecureStorageService, a few flat values in PreferencesService over shared_preferences, and lists, records, cached API data, or offline-first data in DatabaseService over Drift. Never store a secret in preferences or the database. Do not add Hive, Isar, or a second database package.
+    *   Put PreferencesService, its SharedPreferencesAsync impl, and PreferenceKeys in core/services/preferences. Register SharedPreferencesAsync in a @module in core/di. Translate PlatformException into StorageException.
+    *   Put the single Drift AppDatabase, its tables, DbTables, DatabaseService, and its impl in core/services/database. Open the database with driftDatabase from drift_flutter, and register it once in a @module with a dispose that closes it. Only that folder and its module import drift.
+    *   Make DatabaseService generic like NetworkService: query, watch, insert, update, delete, and transaction over a table name and Map<String, Object?> rows. Bind values as ? arguments, reject unknown tables and columns, name the table in readsFrom and updates so watches refresh, and turn every Exception, including DriftRemoteException from the background isolate, into DatabaseException.
+    *   Take column names from DbTables in the Drift table with named(), add fromRow and toRow to the feature model, and convert bool to 0 or 1 and DateTime to Unix seconds.
+    *   In the local datasource, wrap calls in TaskEither.tryCatch with mapToFailure, map DatabaseException and StorageException to StorageFailure, and return Stream<Either<Failure, T>> from a watch, turning stream errors into Left.
+    *   For offline-first, the screen reads the local watch, and a refresh fetches remotely and replaces the rows in a transaction. The Cubit subscribes to the watch and cancels it in close.
+    *   Bump schemaVersion with a step in onUpgrade for each shipped schema change, keep new columns nullable or defaulted, remember that onUpgrade also runs on a downgrade, and export schemas with drift_dev make-migrations once the app has shipped.
+    *   Test the service against NativeDatabase.memory with closeStreamsSynchronously, the datasource with a mocked service, and the Cubit with blocTest. If bloc_test and the newest drift_dev conflict on analyzer, keep bloc_test and let pub choose an older drift_dev.
+  resources:
+    - https://pub.dev/packages/drift
+    - https://drift.simonbinder.eu/setup/
+    - https://drift.simonbinder.eu/migrations/
+    - https://drift.simonbinder.eu/testing/
+    - https://pub.dev/packages/shared_preferences
+    - https://docs.flutter.dev/cookbook/persistence/key-value
 - name: flutter-implement-json-serialization
   description: Map JSON with dart:convert on data-layer models that expose
     fromJson, toJson, and toEntity. Use when adding or changing API models.
@@ -439,7 +468,7 @@
     *   Catch SDK exceptions in the impl and throw app exceptions from core/errors. Add each new exception to the exception-to-Failure helper. Do not create a Failure in the service.
     *   Register the impl with @LazySingleton(as: Interface) unless siblings differ, and register the SDK instance with a @lazySingleton getter in a @module. Never call GetIt.I.register* by hand in app code.
     *   Inject the interface into the datasource constructor. Datasources, Cubits, and widgets never instantiate an SDK.
-    *   Put NetworkService in core/network, storage services in core/storage, and other services in core/services. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
+    *   Put every service in its own folder under core/services/<capability>, with the interface, the impl, and the types only that service uses (keys, events). Do not create core/network or core/storage. Leave @module classes in core/di. Defer HTTP to flutter-use-http-package and preferences or the Drift database to flutter-add-local-storage. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
   resources:
     - https://pub.dev/packages/injectable
     - https://pub.dev/packages/get_it
