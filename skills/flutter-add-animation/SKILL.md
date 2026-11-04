@@ -162,8 +162,10 @@ class _StaggeredListState extends State<StaggeredList>
     with SingleTickerProviderStateMixin {
   static const _maxStaggered = 8;
 
-  late final AnimationController _controller =
-      AnimationController(vsync: this, duration: Durations.long2)..forward();
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Durations.medium4,
+  );
   late final List<Animation<double>> _items = List.generate(
     _maxStaggered,
     (index) => _controller.drive(
@@ -176,6 +178,16 @@ class _StaggeredListState extends State<StaggeredList>
       ),
     ),
   );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1;
+    } else if (!_controller.isAnimating && _controller.value == 0) {
+      _controller.forward();
+    }
+  }
 
   @override
   void dispose() {

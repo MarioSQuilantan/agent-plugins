@@ -34,7 +34,7 @@ The `@Preview` annotation supports the following parameters for tailoring previe
 - `size`: Artificial constraints using a `Size` object.
 - `textScaleFactor`: Custom font scale factor.
 - `wrapper`: A function that wraps the previewed widget in a specific widget tree (e.g., to inject state or inherited widgets).
-- `theme`: A function returning a `PreviewThemeData` subclass instance to provide custom theming with support for sequential theme layering.
+- `theme`: A function returning a `PreviewThemeData` with Material and Cupertino light and dark themes.
 - `brightness`: The initial theme `Brightness` (`Brightness.light` or `Brightness.dark`).
 - `localizations`: A function applying a localization configuration.
 
@@ -126,8 +126,11 @@ final class ThemedPreview extends Preview {
     super.brightness,
   });
 
-  PreviewThemeData _themeBuilder() =>
-      CustomThemeData(brightness: brightness);
+  // appTheme comes from core/theme/. Use the project's dark theme when it has one.
+  PreviewThemeData _themeBuilder() => PreviewThemeData(
+        materialLight: appTheme,
+        materialDark: appTheme,
+      );
 
   @override
   Preview transform() {
@@ -144,27 +147,6 @@ final class ThemedPreview extends Preview {
       ..theme = _themeBuilder;
 
     return builder.build();
-  }
-}
-
-final class CustomThemeData extends PreviewThemeData {
-  const CustomThemeData({this.brightness});
-
-  final Brightness? brightness;
-
-  @override
-  Widget apply(BuildContext context, Widget child) {
-    return Theme(
-      data: ThemeData.from(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.teal,
-          brightness: brightness ??
-              MediaQuery.maybePlatformBrightnessOf(context) ??
-              Brightness.light,
-        ),
-      ),
-      child: child,
-    );
   }
 }
 
@@ -199,7 +181,7 @@ final class MultiBrightnessPreview extends MultiPreview {
       final builder = preview.toBuilder()
         ..group = 'Brightness'
         ..name = '$name - ${preview.brightness!.name}';
-      return builder.toPreview();
+      return builder.build();
     }).toList();
   }
 }

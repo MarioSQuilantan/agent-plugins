@@ -36,7 +36,7 @@ Understand and apply Flutter's core layout rule: **Constraints go down. Sizes go
 Ensure the app behaves correctly across all device form factors and input methods.
 
 *   **Do not lock screen orientation.** Locking orientation causes severe layout issues on foldable devices, often resulting in letterboxing (the app centered with black borders). Android large format tiers require both portrait and landscape support.
-*   **Fallback for Locked Orientation:** If business requirements strictly mandate a locked orientation, use the `Display API` to retrieve physical screen dimensions instead of `MediaQuery`. `MediaQuery` fails to receive the larger window size in compatibility modes.
+*   **Fallback for Locked Orientation:** If business requirements strictly mandate a locked orientation, read the physical size with `View.of(context).display.size / View.of(context).display.devicePixelRatio` instead of `MediaQuery`. `MediaQuery` fails to receive the larger window size in compatibility modes.
 *   **Support Multiple Inputs:** Implement support for basic mice, trackpads, and keyboard shortcuts. Ensure touch targets are appropriately sized and keyboard navigation is accessible.
 
 ## Workflow: Constructing an Adaptive Layout
@@ -50,7 +50,7 @@ Follow this workflow to implement a layout that adapts to the available `BoxCons
 - [ ] Define an adaptive breakpoint (e.g., `largeScreenMinWidth = 600`).
 - [ ] **If `maxWidth > largeScreenMinWidth`:** Return a large-screen layout (e.g., a `Row` placing a navigation sidebar and content area side-by-side).
 - [ ] **If `maxWidth <= largeScreenMinWidth`:** Return a small-screen layout (e.g., a `Column` or standard navigation-style approach).
-- [ ] Run validator -> resize the application window -> review layout transitions -> fix overflow errors.
+- [ ] Resize the application window, review the layout transitions, and fix overflow errors.
 
 ## Workflow: Optimizing for Large Screens
 
@@ -62,7 +62,7 @@ Follow this workflow to prevent UI elements from stretching unnaturally on large
 - [ ] **If optimizing a form or text block:** Wrap the component in a `ConstrainedBox`.
 - [ ] Apply `BoxConstraints(maxWidth: [optimal_width])` to the `ConstrainedBox`.
 - [ ] Wrap the `ConstrainedBox` in a `Center` widget to keep the constrained content centered on large screens.
-- [ ] Run validator -> test on desktop/tablet target -> review horizontal stretching -> adjust `maxWidth` or grid extents.
+- [ ] Test on a desktop or tablet target, review horizontal stretching, and adjust `maxWidth` or the grid extents.
 
 ## Examples
 
@@ -93,15 +93,15 @@ class AdaptiveLayout extends StatelessWidget {
   Widget _buildLargeScreenLayout() {
     return Row(
       children: [
-        const SizedBox(width: 250, child: Placeholder(color: Colors.blue)),
+        const SizedBox(width: 250, child: Placeholder()),
         const VerticalDivider(width: 1),
-        Expanded(child: const Placeholder(color: Colors.green)),
+        const Expanded(child: Placeholder()),
       ],
     );
   }
 
   Widget _buildSmallScreenLayout() {
-    return const Placeholder(color: Colors.green);
+    return const Placeholder();
   }
 }
 ```

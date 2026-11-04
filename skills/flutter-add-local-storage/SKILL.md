@@ -46,6 +46,13 @@ class DatabaseException implements Exception {
 }
 ```
 
+```dart
+// core/errors/failures.dart
+class StorageFailure extends Failure {
+  const StorageFailure();
+}
+```
+
 Add `StorageException() || DatabaseException() => const StorageFailure()` to `mapToFailure`, and a `StorageFailure` message to the `FailureMessage` extension.
 
 ## Preferences
@@ -162,41 +169,43 @@ Drift derives the SQL table name from the class name (`Todos` becomes `todos`); 
 ```dart
 // core/services/database/app_database.dart
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 
 part 'app_database.g.dart';
 
 @DriftDatabase(tables: [Todos])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
+  AppDatabase(super.executor);
 
   @override
   int get schemaVersion => 1;
-
-  static QueryExecutor _open() => driftDatabase(
-        name: 'app',
-        native: const DriftNativeOptions(
-          databaseDirectory: getApplicationSupportDirectory,
-        ),
-      );
 }
 ```
 
-`driftDatabase` opens the file lazily on a background isolate, so `bootstrap` does not need to await it. Web needs the extra setup in the Drift web guide; add it only when the project targets web.
+The module chooses where the file lives, so `AppDatabase` imports only `package:drift`, and tests pass an in-memory executor through the same constructor:
 
 ```dart
 // core/di/database_module.dart
+import 'package:drift_flutter/drift_flutter.dart';
+import 'package:injectable/injectable.dart';
+import 'package:path_provider/path_provider.dart';
+
 @module
 abstract class DatabaseModule {
   @LazySingleton(dispose: closeDatabase)
-  AppDatabase get database => AppDatabase();
+  AppDatabase get database => AppDatabase(
+        driftDatabase(
+          name: 'app',
+          native: const DriftNativeOptions(
+            databaseDirectory: getApplicationSupportDirectory,
+          ),
+        ),
+      );
 }
 
 Future<void> closeDatabase(AppDatabase database) => database.close();
 ```
 
-Register one `AppDatabase` for the whole app. Opening two instances on the same file breaks stream updates.
+Register one `AppDatabase` for the whole app. Opening two instances on the same file breaks stream updates. `driftDatabase` opens the file lazily on a background isolate, so `bootstrap` does not need to await it. Web needs the extra setup in the Drift web guide; add it only when the project targets web.
 
 ### Service
 
@@ -519,7 +528,37 @@ Offline-first means the screen always reads the local table. `refreshTodos` fetc
 
 ### Cubit
 
+A failed refresh must not hide the cached rows, so the loaded state carries the refresh failure instead of being replaced:
+
 ```dart
+sealed class TodosState extends Equatable {
+  const TodosState();
+
+  @override
+  List<Object?> get props => [];
+}
+
+class TodosLoading extends TodosState {
+  const TodosLoading();
+}
+
+class TodosLoaded extends TodosState {
+  const TodosLoaded(this.todos, {this.refreshFailure});
+  final List<Todo> todos;
+  final Failure? refreshFailure;
+
+  @override
+  List<Object?> get props => [todos, refreshFailure];
+}
+
+class TodosFailure extends TodosState {
+  const TodosFailure(this.failure);
+  final Failure failure;
+
+  @override
+  List<Object?> get props => [failure];
+}
+
 @injectable
 class TodosCubit extends Cubit<TodosState> {
   TodosCubit(this._repository) : super(const TodosLoading());
@@ -536,7 +575,14 @@ class TodosCubit extends Cubit<TodosState> {
   Future<void> refresh() async {
     final result = await _repository.refreshTodos().run();
     if (isClosed) return;
-    result.match((failure) => emit(TodosFailure(failure)), (_) {});
+    result.match((failure) {
+      final current = state;
+      emit(
+        current is TodosLoaded
+            ? TodosLoaded(current.todos, refreshFailure: failure)
+            : TodosFailure(failure),
+      );
+    }, (_) {});
   }
 
   @override
@@ -547,7 +593,7 @@ class TodosCubit extends Cubit<TodosState> {
 }
 ```
 
-`TodosState` is a sealed state with `TodosLoading`, `TodosLoaded`, and `TodosFailure`, as in the architecture skill. Watching and refreshing each forward one repository call, so the Cubit calls the repository directly; put any rule in a use case. The page creates the Cubit with `getIt<TodosCubit>()..watch()..refresh()` and renders with `BlocBuilder`.
+Watching and refreshing each forward one repository call, so the Cubit calls the repository directly; put any rule in a use case. The page creates the Cubit with `getIt<TodosCubit>()..watch()..refresh()`, renders with `BlocBuilder`, and shows `refreshFailure` in a snackbar from a `BlocListener` whose `listenWhen` checks that it changed. When the refresh fails before the cache is read, the next watch emission replaces `TodosFailure` with the cached rows.
 
 ### Migrations
 
@@ -577,15 +623,15 @@ MigrationStrategy get migration => MigrationStrategy(
 ## Tests
 
 - **Service.** Test `DatabaseServiceImpl` against an in-memory database: `AppDatabase(DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true))` in `setUp`, and `database.close()` in `tearDown`. Cover insert and query, a watch that emits after an update, a constraint violation that throws `DatabaseException`, and a transaction that rolls back.
-- **Datasource.** Mock `DatabaseService` or `PreferencesService` with `mocktail`, as with `NetworkService`. Cover decoding, a `DatabaseException` that becomes `StorageFailure`, a malformed row that becomes `SerializationFailure`, and a stream error that becomes a `Left`.
-- **Cubit.** Mock the repository and stub `watchTodos()` with `Stream.fromIterable([...])`. Use `blocTest` for the emitted states.
+- **Datasource.** Mock `DatabaseService` or `PreferencesService` with the project's mock library (`mocktail` when there is none), as with `NetworkService`. Cover decoding, a `DatabaseException` that becomes `StorageFailure`, a malformed row that becomes `SerializationFailure`, and a stream error that becomes a `Left`.
+- **Cubit.** Mock the repository and stub `watchTodos()` with `Stream.fromIterable([...])`. Use `blocTest` for the emitted states, including a failed refresh after the rows loaded, which keeps the rows and sets `refreshFailure`.
 - **Integration.** An integration test that needs a clean database registers `AppDatabase(NativeDatabase.memory())` in a scope pushed with `getIt.pushNewScope` after the DI setup.
 
 ## Do not
 
 ```dart
 // In a datasource, Cubit, or widget:
-final db = AppDatabase();
+final db = AppDatabase(driftDatabase(name: 'app'));
 final prefs = await SharedPreferences.getInstance();
 StreamBuilder(stream: context.read<AppDatabase>().select(db.todos).watch(), ...);
 ```

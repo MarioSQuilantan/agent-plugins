@@ -106,8 +106,20 @@ class AuthRemoteDataSource {
   TaskEither<Failure, AuthSessionModel> signIn(SignInRequest request) =>
       TaskEither.tryCatch(
         () async {
-          final json = await _network.post('/auth/login', body: request.toJson());
+          final json = await _network.post(
+            '/auth/login',
+            body: request.toJson(),
+            authenticated: false,
+          );
           return AuthSessionModel.fromJson(json as Map<String, dynamic>);
+        },
+        mapToFailure,
+      );
+
+  TaskEither<Failure, UserModel> fetchCurrentUser() => TaskEither.tryCatch(
+        () async {
+          final json = await _network.get('/auth/me');
+          return UserModel.fromJson(json as Map<String, dynamic>);
         },
         mapToFailure,
       );
@@ -118,6 +130,11 @@ class AuthLocalDataSource {
   AuthLocalDataSource(this._storage);
 
   final SecureStorageService _storage;
+
+  TaskEither<Failure, String?> readToken() => TaskEither.tryCatch(
+        () => _storage.read(StorageKeys.accessToken),
+        mapToFailure,
+      );
 
   TaskEither<Failure, Unit> saveToken(String token) => TaskEither.tryCatch(
         () async {
@@ -183,10 +200,23 @@ class AuthRepositoryImpl implements AuthRepository {
       });
 
   @override
-  TaskEither<Failure, Unit> signOut() => _local.deleteToken().map((_) {
+  TaskEither<Failure, Unit> signOut() => TaskEither(() async {
+        final result = await _local.deleteToken().run();
         _publish(null);
-        return unit;
+        return result;
       });
+
+  @override
+  TaskEither<Failure, User?> restoreSession() =>
+      _local.readToken().flatMap<User?>(
+            (token) => token == null
+                ? TaskEither.right(null)
+                : _remote.fetchCurrentUser().map((model) {
+                    final user = model.toEntity();
+                    _publish(user);
+                    return user;
+                  }),
+          );
 
   @override
   Stream<User?> watchSession() => _session.stream;
@@ -198,11 +228,21 @@ class AuthRepositoryImpl implements AuthRepository {
 }
 ```
 
-The server already rejected the token, so `_expireSession` ends the session even when deleting the token fails.
+`signOut` and `_expireSession` end the session in memory even when deleting the token fails, so `currentUser` and the session Cubit always agree. `signOut` still returns the failure to its caller.
 
 Use case with a business rule. In this example `User` also has an `isEmailVerified` field. Field checks such as "required" already ran in the form inputs. The session is saved only when the rule passes, so the router never sees a session that is about to be rejected:
 
 ```dart
+class SignInParams extends Equatable {
+  const SignInParams({required this.email, required this.password});
+
+  final String email;
+  final String password;
+
+  @override
+  List<Object?> get props => [email, password];
+}
+
 @injectable
 class SignInUseCase {
   SignInUseCase(this._repository);
@@ -266,9 +306,7 @@ class SessionCubit extends Cubit<SessionState> {
   }
 
   Future<void> signOut() async {
-    final result = await _repository.signOut().run();
-    if (isClosed) return;
-    result.match((_) => emit(const SessionUnauthenticated()), (_) {});
+    await _repository.signOut().run();
   }
 
   @override
@@ -279,9 +317,9 @@ class SessionCubit extends Cubit<SessionState> {
 }
 ```
 
-On success the session stream emits `null`. If deleting the token fails, `signOut` still ends the session in memory.
+`signOut` needs no branch: the repository publishes `null` in both cases, and the subscription emits `SessionUnauthenticated`. Ending the session locally when deleting the token fails is a deliberate decision, not a swallowed failure; the server rejects the leftover token on the next launch.
 
-`restoreSession` keeps the user signed in across launches. It returns `null` when no token is stored; otherwise it loads the user with the remote datasource and publishes it. `bootstrap` is async and awaits `getIt<SessionCubit>().restore()` before `runApp`, so the first redirect already sees the restored session. A failed restore leaves the user signed out but keeps the token, so an offline launch does not sign the user out; a rejected token is removed through `SessionEvents`. An expired token needs no code in pages or Cubits: `SessionEvents` reaches the repository, the session stream emits `null`, and the router redirect sends the user to `/login`.
+`restoreSession` keeps the user signed in across launches. It returns `null` when no token is stored; otherwise it loads the user with `fetchCurrentUser` and publishes it. `bootstrap` is async and awaits `getIt<SessionCubit>().restore()` before `runApp`, so the first redirect already sees the restored session. A failed restore leaves the user signed out but keeps the token, so an offline launch does not sign the user out; a rejected token is removed through `SessionEvents`. An expired token needs no code in pages or Cubits: `SessionEvents` reaches the repository, the session stream emits `null`, and the router redirect sends the user to `/login`.
 
 A screen that loads data or performs one action uses a sealed state. For a profile screen backed by a `GetProfileUseCase` that returns `TaskEither<Failure, User>`:
 

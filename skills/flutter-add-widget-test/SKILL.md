@@ -56,7 +56,7 @@ Apply the following conditional logic based on the type of interaction or state 
     2. Call `await tester.pump()` to trigger a single frame rebuild.
 *   **If testing animations, transitions, or asynchronous UI updates:** 
     1. Trigger the action (e.g., `await tester.drag(finder, Offset(500, 0))`).
-    2. Call `await tester.pumpAndSettle()` to repeatedly pump frames until no more frames are scheduled (animation completes).
+    2. Call `await tester.pumpAndSettle()` to pump frames until the animation completes. For a finite animation only: while a repeating animation (a progress indicator, a pulse) is on screen, `pumpAndSettle` times out, so use `pump(duration)`.
 *   **If testing text input:** Call `await tester.enterText(textFieldFinder, 'Input string')`.
 *   **If testing items in a dynamic or long list:** Call `await tester.scrollUntilVisible(itemFinder, 500.0, scrollable: listFinder)` to ensure the target widget is rendered before interacting with it.
 
@@ -122,7 +122,7 @@ The `TodoList` example keeps its state in `setState` only to show the `WidgetTes
 
 ### High-Fidelity Widget Test Implementation
 
-**Target Widget (`lib/todo_list.dart`):**
+**Target Widget (`lib/ui/todos/todo_list.dart`):**
 ```dart
 import 'package:flutter/material.dart';
 
@@ -138,36 +138,40 @@ class _TodoListState extends State<TodoList> {
   final controller = TextEditingController();
 
   @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        body: Column(
-          children: [
-            TextField(controller: controller),
-            Expanded(
-              child: ListView.builder(
-                itemCount: todos.length,
-                itemBuilder: (context, index) {
-                  final todo = todos[index];
-                  return Dismissible(
-                    key: Key('$todo$index'),
-                    onDismissed: (_) => setState(() => todos.removeAt(index)),
-                    child: ListTile(title: Text(todo)),
-                  );
-                },
-              ),
+    return Scaffold(
+      body: Column(
+        children: [
+          TextField(controller: controller),
+          Expanded(
+            child: ListView.builder(
+              itemCount: todos.length,
+              itemBuilder: (context, index) {
+                final todo = todos[index];
+                return Dismissible(
+                  key: Key('$todo$index'),
+                  onDismissed: (_) => setState(() => todos.removeAt(index)),
+                  child: ListTile(title: Text(todo)),
+                );
+              },
             ),
-          ],
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () {
-            setState(() {
-              todos.add(controller.text);
-              controller.clear();
-            });
-          },
-          child: const Icon(Icons.add),
-        ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          setState(() {
+            todos.add(controller.text);
+            controller.clear();
+          });
+        },
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -178,12 +182,14 @@ class _TodoListState extends State<TodoList> {
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:my_app/todo_list.dart';
+import 'package:my_app/core/theme/app_theme.dart';
+import 'package:my_app/ui/todos/todo_list.dart';
 
 void main() {
   testWidgets('Add and remove a todo item', (WidgetTester tester) async {
-    // 1. Build the widget
-    await tester.pumpWidget(const TodoList());
+    await tester.pumpWidget(
+      MaterialApp(theme: appTheme, home: const TodoList()),
+    );
 
     // 2. Verify initial state
     expect(find.byType(ListTile), findsNothing);

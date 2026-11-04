@@ -34,7 +34,7 @@ To go from a single environment to several, rename `.env` to `.env.<name>` for t
 - [ ] **3. Env files.** Create `.env.<flavor>` (or `.env`) and its committed `.example` twin with the same keys and empty values. Add the ignore entries to `.gitignore`.
 - [ ] **4. Env classes.** One `@Envied` class per env file in `core/config/env/`.
 - [ ] **5. AppConfig.** Create the `AppConfig` class when missing, and one implementation per flavor with `@LazySingleton(as: AppConfig, env: ['<flavor>'])`. A single environment uses no `env`. Shared values live once in `AppConfig`.
-- [ ] **6. DI and bootstrap.** Make the DI setup take the environment. Add one shared `bootstrap` in `app/` and one `main_<flavor>.dart` per flavor that only calls it. A single environment keeps `main.dart`.
+- [ ] **6. DI and bootstrap.** Make the DI setup take the environment. Add one shared `bootstrap` in `app/` and one `main_<flavor>.dart` per flavor that only calls it. A single environment also uses `bootstrap`; `main.dart` only calls it.
 - [ ] **7. Android.** Several flavors only: add a flavor dimension and one entry per flavor in `productFlavors`.
 - [ ] **8. iOS.** Several flavors only: add the build configurations, xcconfig files, schemes, and Podfile mappings for each flavor.
 - [ ] **9. Launch configs.** Several flavors only: create `.vscode/launch.json` when it is missing, with one entry per flavor. When it exists, add only the missing entries and keep the others. If `.gitignore` ignores `.vscode/`, tell the user the file stays local.
@@ -141,7 +141,7 @@ void bootstrap(String flavor) {
 void main() => bootstrap('dev');
 ```
 
-For a single environment, the implementation has no `env`, `configureDependencies()` takes no argument, and `main.dart` calls it before `runApp`.
+For a single environment, the implementation has no `env` and `configureDependencies()` takes no argument. `bootstrap` still lives in `app/` and calls `configureDependencies()` then `runApp`, and `main.dart` is only `void main() => bootstrap();`.
 
 When the app restores a session or loads other state at startup, make `bootstrap` return `Future<void>`, await that work after `configureDependencies` and before `runApp`, and declare `Future<void> main() => bootstrap('dev');`.
 
@@ -173,7 +173,7 @@ For each flavor:
 
 1. In Xcode, duplicate the `Debug`, `Release`, and `Profile` build configurations as `Debug-<flavor>`, `Release-<flavor>`, and `Profile-<flavor>`.
 2. Create a shared scheme named exactly `<flavor>` that uses those configurations. Flutter selects the scheme by the `--flavor` name.
-3. Add `ios/Flutter/<flavor>.xcconfig` that includes the matching `Debug.xcconfig` or `Release.xcconfig` and sets the bundle ID suffix and display name, and assign it to the new configurations.
+3. Add `ios/Flutter/<flavor>.xcconfig` that includes the matching `Debug.xcconfig` or `Release.xcconfig` and sets the bundle ID suffix and display name, and assign it to the new configurations. Also include the CocoaPods file for that configuration, `Pods/Target Support Files/Pods-Runner/Pods-Runner.<config>-<flavor>.xcconfig` (lowercase config name, for example `Pods-Runner.debug-dev.xcconfig`). Without it CocoaPods warns that the base configuration was not set.
 4. Map the configurations in the `Podfile` (`'Debug-dev' => :debug`, `'Release-dev' => :release`, `'Profile-dev' => :release`), then run `pod install`.
 
 Xcode project edits are error-prone from the command line. When they cannot be verified on a Mac, list the remaining iOS steps for the user instead of claiming they are done.

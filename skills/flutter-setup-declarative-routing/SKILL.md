@@ -7,6 +7,8 @@ metadata:
 ---
 # Implementing Routing and Deep Linking
 
+Follow the Flutter Architecture rule. The route table lives in `lib/app/router/`, pages live in `lib/ui/`, and `bootstrap` in `app/` is the only startup code. The section "Router in a Clean Architecture Project" is the one to follow. The `main.dart` sample below is only for a project that does not follow that rule.
+
 ## Contents
 - [Core Concepts](#core-concepts)
 - [Workflow: Initializing the Application and Router](#workflow-initializing-the-application-and-router)
@@ -44,7 +46,7 @@ flutter pub add go_router
 ```
 
 ### 2. Configure the Router
-Define a top-level `GoRouter` instance. Handle authentication or state-based routing using the `redirect` parameter.
+Skip this sample when the project follows the Flutter Architecture rule. It is a standalone app with the router in `main.dart`. Add `flutter_web_plugins` from the Flutter SDK (`flutter pub add flutter_web_plugins --sdk=flutter`) before importing it, or the analyzer reports `depend_on_referenced_packages`.
 
 ```dart
 import 'package:flutter/material.dart';
@@ -150,6 +152,18 @@ class AppRouter {
 
 The redirect keeps a deep link: a signed-out user who opens `/orders/42` signs in and returns there. `_safeReturn` accepts only an in-app path, so a crafted `from` cannot send the user to another site. The redirect reads query parameters from `state.uri`, which requires go_router 13.2.0 or later; on an older version, upgrade go_router or redirect to `/login` without `from`. `bootstrap` restores the session before `runApp`, so a signed-in user never sees `/login` at startup.
 
+When the app targets web, add `flutter_web_plugins` from the Flutter SDK and call `usePathUrlStrategy()` at the start of `bootstrap`, before `runApp`. A flavor entry point stays a one-line call to `bootstrap`.
+
+Name a route when something navigates to it with `goNamed`:
+
+```dart
+GoRoute(
+  path: '/details/:id',
+  name: 'details',
+  builder: (context, state) => DetailsPage(id: state.pathParameters['id']!),
+),
+```
+
 ```dart
 // lib/app/app.dart
 class App extends StatelessWidget {
@@ -180,7 +194,7 @@ Configure the native platforms to intercept specific URLs and route them into th
 - [ ] Determine target platforms (iOS, Android, or both).
 - [ ] Apply conditional configuration for Android (Manifest + Asset Links).
 - [ ] Apply conditional configuration for iOS (Plist + Entitlements + AASA).
-- [ ] Run validator -> review errors -> fix.
+- [ ] Run `dart analyze` and fix what it reports.
 
 ### If configuring for Android:
 1. **Modify `AndroidManifest.xml`**: Add the intent filter inside the `<activity>` tag for `.MainActivity`.
@@ -234,7 +248,7 @@ Configure the native platforms to intercept specific URLs and route them into th
 ```
 
 ### Validation Loop
-Run validator -> review errors -> fix.
+Run `dart analyze`, then open a link and confirm the route.
 - **Android**: Test using ADB.
   ```bash
   adb shell 'am start -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d "https://yourdomain.com/details/123"' com.yourcompany.yourapp
@@ -254,10 +268,9 @@ Use `StatefulShellRoute` to implement persistent UI shells (like a bottom naviga
 - [ ] Implement the shell widget using `StatefulNavigationShell`.
 
 ```dart
-final GoRouter _router = GoRouter(
-  initialLocation: '/home',
-  routes: [
-    StatefulShellRoute.indexedStack(
+// These routes go in AppRouter.config, next to the existing routes.
+// The shell widget lives in lib/ui/.
+StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) {
         return ScaffoldWithNavBar(navigationShell: navigationShell);
       },
@@ -266,7 +279,7 @@ final GoRouter _router = GoRouter(
           routes: [
             GoRoute(
               path: '/home',
-              builder: (context, state) => const HomeScreen(),
+              builder: (context, state) => const HomePage(),
             ),
           ],
         ),
@@ -274,14 +287,12 @@ final GoRouter _router = GoRouter(
           routes: [
             GoRoute(
               path: '/settings',
-              builder: (context, state) => const SettingsScreen(),
+              builder: (context, state) => const SettingsPage(),
             ),
           ],
         ),
       ],
-    ),
-  ],
-);
+    );
 ```
 
 ## Examples

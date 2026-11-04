@@ -1,6 +1,6 @@
 ---
 name: flutter-implement-json-serialization
-description: Map JSON with dart:convert on data-layer models that expose fromJson, toJson, and toEntity. Use when adding or changing API models. Keep domain entities free of JSON.
+description: Map decoded JSON maps on data-layer models that expose fromJson, toJson, and toEntity. Use when adding or changing API models. Keep domain entities free of JSON. NetworkService already decodes the body.
 metadata:
   model: manual
   last_modified: Sun, 25 Oct 2026 18:45:00 GMT

@@ -23,10 +23,11 @@ Configure the project to support integration testing and Flutter Driver extensio
    ```bash
    flutter pub add 'dev:integration_test:{"sdk":"flutter"}'
    flutter pub add 'dev:flutter_test:{"sdk":"flutter"}'
+   flutter pub add 'dev:flutter_driver:{"sdk":"flutter"}'
    ```
-2. Enable the Flutter Driver extension in your application entry point (typically `lib/main.dart` or a dedicated `lib/main_driver.dart`). Do not name it `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points:
+2. Enable the Flutter Driver extension only in a dedicated `lib/main_driver.dart`. Do not add it to `main.dart` or `main_<flavor>.dart`; that ships the extension in release builds. Do not name the file `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points.
    - Import `package:flutter_driver/driver_extension.dart`.
-   - Call `enableFlutterDriverExtension();` before `runApp()`.
+   - Call `enableFlutterDriverExtension();`, then the project's `bootstrap(...)`.
 3. Add `Key` parameters (e.g., `ValueKey('login_button')`) to critical widgets in the application code to ensure reliable targeting during tests.
 
 ## Interactive Exploration via MCP
@@ -35,9 +36,9 @@ Use the Dart/Flutter MCP server tools to interactively explore and manipulate th
 
 - **Launch**: Execute `launch_app` with `target: "lib/main_driver.dart"` to start the application and acquire the DTD URI.
 - **Inspect**: Execute `get_widget_tree` to discover available `Key`s, `Text` nodes, and widget `Type`s.
-- **Interact**: Execute `tap`, `enter_text`, and `scroll` to simulate user flows.
-- **Wait**: Always execute `waitFor` or verify state with `get_health` when navigating or triggering animations.
-- **Troubleshoot Unmounted Widgets**: If a widget is not found in the tree, it may be lazily loaded in a `SliverList` or `ListView`. Execute `scroll` or `scrollIntoView` to force the widget to mount before interacting with it.
+- **Interact**: Call the `flutter_driver` tool with the `tap`, `enter_text`, or `scroll` command to simulate user flows.
+- **Wait**: Call `flutter_driver` with `waitFor`, or check `get_health`, when navigating or triggering animations.
+- **Troubleshoot Unmounted Widgets**: If a widget is not found in the tree, it may be lazily loaded in a `SliverList` or `ListView`. Call `flutter_driver` with `scroll` or `scrollIntoView` to force the widget to mount before interacting with it.
 
 ## Test Authoring Guidelines
 
@@ -46,7 +47,7 @@ Structure integration tests using the `flutter_test` API paradigm.
 - Create a dedicated `integration_test/` directory at the project root.
 - Name all test files using the `<name>_test.dart` convention.
 - Initialize the binding by calling `IntegrationTestWidgetsFlutterBinding.ensureInitialized();` at the start of `main()`.
-- Load the application UI using `await tester.pumpWidget(MyApp());`.
+- Load the application UI with `await tester.pumpWidget(const App());`. `App` is the root widget in `lib/app/app.dart`.
 - If the app uses `get_it` and `injectable`, call the project's DI setup before `pumpWidget` (`configureDependencies()`, or `configureDependencies('<flavor>')` when the project has flavors), and reset it with `await getIt.reset()` in `tearDown` when several tests set it up. When the test must not reach the real backend, push a test scope after the DI setup runs and before anything resolves the service: `getIt.pushNewScope(init: (getIt) => getIt.registerSingleton<NetworkService>(FakeNetworkService()))`. The fake shadows the real registration, and `await getIt.reset()` in `tearDown` removes both. This is the only place where code registers a dependency by hand.
 - Trigger frames and wait for animations to complete using `await tester.pumpAndSettle();` after interactions like `tester.tap()`. While a repeating animation is on screen, such as a `CircularProgressIndicator`, `pumpAndSettle` times out; use `pump(duration)` or wait for the finder instead.
 - Assert widget visibility using `expect(find.byKey(ValueKey('foo')), findsOneWidget);` or `findsNothing`.
@@ -74,8 +75,8 @@ Execute tests using the `flutter drive` command. Require a host driver script lo
 Copy and follow this checklist to implement and verify integration tests.
 
 - [ ] **Task Progress: Setup**
-  - [ ] Add `integration_test` and `flutter_test` to `pubspec.yaml`.
-  - [ ] Inject `enableFlutterDriverExtension()` into the app entry point.
+  - [ ] Add `integration_test`, `flutter_test`, and `flutter_driver` as dev dependencies.
+  - [ ] Add `lib/main_driver.dart` that enables the driver extension and then calls `bootstrap`.
   - [ ] Assign `ValueKey`s to target widgets.
 - [ ] **Task Progress: Exploration**
   - [ ] Run `launch_app` via MCP.
@@ -97,8 +98,8 @@ Copy and follow this checklist to implement and verify integration tests.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:my_app/app/app.dart';
 import 'package:my_app/core/di/injection.dart';
-import 'package:my_app/main.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -106,12 +107,12 @@ void main() {
   group('End-to-end test', () {
     testWidgets('tap on the floating action button, verify counter', (tester) async {
       // Register dependencies when the app uses get_it and injectable.
-      // Pass the flavor when the project has flavors, and await the call
-      // when the project's setup is async.
-      configureDependencies('dev');
+      // Pass the flavor only when the project has flavors, and await the call
+      // when the project's setup is async. This skips bootstrap, which also
+      // calls runApp.
+      configureDependencies();
 
-      // Load app widget.
-      await tester.pumpWidget(const MyApp());
+      await tester.pumpWidget(const App());
 
       // Verify the counter starts at 0.
       expect(find.text('0'), findsOneWidget);

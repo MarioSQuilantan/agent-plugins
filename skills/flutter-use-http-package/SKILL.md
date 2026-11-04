@@ -27,7 +27,7 @@ Do not call the client from a widget, a Cubit, or a datasource. Do not use `Futu
 - Build URLs inside the impl from the project's base URL config. Datasources pass a path and query map.
 - Send POST and PUT bodies as `request.toJson()` from a `data/requests` object. The impl encodes JSON and sets `Content-Type` to `application/json; charset=UTF-8`.
 - Treat any 2xx as success. Throw `UnauthorizedException` on 401, `ServerException(statusCode)` on any other non-2xx status, and `NetworkException` on no connection or a timeout.
-- A 401 on a request without a token, such as a wrong password on sign-in, is a normal failure. A 401 on a request with a token means the session expired: call `SessionEvents.reportExpired()` so the auth repository signs out once for the whole app.
+- A 401 on a request without a token, such as a wrong password on sign-in (sent with `authenticated: false`), is a normal failure. A 401 on a request with a token means the session expired: call `SessionEvents.reportExpired()` so the auth repository signs out once for the whole app.
 - Return `null` for an empty body. For DELETE, the datasource returns `Right(unit)`.
 - For a large payload, decode in the impl with `compute(jsonDecode, response.body)`.
 
@@ -37,11 +37,13 @@ Do not call the client from a widget, a Cubit, or a datasource. Do not use `Futu
 // core/services/network/network_service.dart
 abstract class NetworkService {
   Future<Object?> get(String path, {Map<String, String>? query});
-  Future<Object?> post(String path, {Object? body});
+  Future<Object?> post(String path, {Object? body, bool authenticated = true});
   Future<Object?> put(String path, {Object? body});
   Future<Object?> delete(String path);
 }
 ```
+
+`authenticated: false` sends no token. Use it for public endpoints such as sign-in, sign-up, and password reset, so a stale token left on the device cannot turn a wrong password into an expired session. Add the flag to another method only when a public endpoint needs it.
 
 ```dart
 // core/errors/exceptions.dart
@@ -57,7 +59,13 @@ class UnauthorizedException implements Exception {
 class NetworkException implements Exception {
   const NetworkException();
 }
+
+class StorageException implements Exception {
+  const StorageException();
+}
 ```
+
+`StorageException` is what `SecureStorageService` throws (`flutter-wrap-package-service`), so the auth datasource that stores the token maps it too.
 
 ```dart
 // core/errors/map_to_failure.dart
@@ -65,6 +73,7 @@ Failure mapToFailure(Object error, StackTrace stackTrace) => switch (error) {
       UnauthorizedException() => const UnauthorizedFailure(),
       ServerException(:final statusCode) => ServerFailure(statusCode: statusCode),
       NetworkException() => const NetworkFailure(),
+      StorageException() => const StorageFailure(),
       FormatException() || TypeError() => const SerializationFailure(),
       _ => UnexpectedFailure(error: error, stackTrace: stackTrace),
     };
@@ -93,6 +102,10 @@ class UnauthorizedFailure extends Failure {
 
 class SerializationFailure extends Failure {
   const SerializationFailure();
+}
+
+class StorageFailure extends Failure {
+  const StorageFailure();
 }
 
 class ServerFailure extends Failure {
@@ -147,7 +160,6 @@ class SessionEvents {
 // core/services/network/network_service_impl.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:injectable/injectable.dart';
@@ -171,8 +183,14 @@ class NetworkServiceImpl implements NetworkService {
       _send((headers) => _client.get(_uri(path, query), headers: headers));
 
   @override
-  Future<Object?> post(String path, {Object? body}) => _send(
+  Future<Object?> post(
+    String path, {
+    Object? body,
+    bool authenticated = true,
+  }) =>
+      _send(
         (headers) => _client.post(_uri(path), headers: headers, body: _encode(body)),
+        authenticated: authenticated,
       );
 
   @override
@@ -190,20 +208,20 @@ class NetworkServiceImpl implements NetworkService {
   String? _encode(Object? body) => body == null ? null : jsonEncode(body);
 
   Future<Object?> _send(
-    Future<http.Response> Function(Map<String, String> headers) request,
-  ) async {
-    final token = await _storage.read(StorageKeys.accessToken);
+    Future<http.Response> Function(Map<String, String> headers) request, {
+    bool authenticated = true,
+  }) async {
+    final token =
+        authenticated ? await _storage.read(StorageKeys.accessToken) : null;
     final headers = {
-      HttpHeaders.acceptHeader: 'application/json',
-      HttpHeaders.contentTypeHeader: 'application/json; charset=UTF-8',
-      if (token != null) HttpHeaders.authorizationHeader: 'Bearer $token',
+      'Accept': 'application/json',
+      'Content-Type': 'application/json; charset=UTF-8',
+      if (token != null) 'Authorization': 'Bearer $token',
     };
 
     final http.Response response;
     try {
       response = await request(headers).timeout(_config.timeout);
-    } on SocketException {
-      throw const NetworkException();
     } on TimeoutException {
       throw const NetworkException();
     } on http.ClientException {
@@ -223,7 +241,7 @@ class NetworkServiceImpl implements NetworkService {
 }
 ```
 
-`AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. `StorageKeys` lives in `core/services/secure_storage/storage_keys.dart`; the auth datasource writes the token with the same key. Register `http.Client` in a module:
+`http.ClientException` also covers a socket error, so the impl does not import `dart:io` and builds for web. `AppConfig` is the environment config in `core/config/` (base URL, timeout) described in `flutter-setup-flavors`. `StorageKeys` lives in `core/services/secure_storage/storage_keys.dart`; the auth datasource writes the token with the same key. Register `http.Client` in a module:
 
 ```dart
 // core/di/network_module.dart
@@ -288,5 +306,5 @@ Skip this section unless the request asks for token refresh or the project alrea
 - Add `abstract class TokenRefresher { Future<bool> refresh(); }` in `core/services/network/`. The auth feature implements it in `data/` with `@LazySingleton(as: TokenRefresher)`, so `core/` never imports a feature.
 - In the `NetworkService` impl, on a 401 for a request that carried a token, await one shared refresh and retry the request once with the new token. When the refresh fails, call `SessionEvents.reportExpired()`.
 - Concurrent 401s wait for the same refresh `Future`. With Dio, use a `QueuedInterceptor`.
-- The refresh call itself bypasses this logic (a separate client or a flag), so a failed refresh cannot loop.
+- The refresh call itself bypasses this logic, so a failed refresh cannot loop. The `TokenRefresher` impl must not depend on `NetworkService`, or `get_it` hits a cycle (`NetworkServiceImpl` → `TokenRefresher` → datasource → `NetworkService`). Give it the raw client and `AppConfig` directly, or register a second client with `@Named('refresh')` in the network module.
 - Test the impl: the refresh succeeds and the request is retried; the refresh fails and the session expires; two concurrent 401s trigger one refresh.

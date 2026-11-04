@@ -34,10 +34,10 @@ Copy and use this checklist to systematically resolve layout constraint violatio
 - [ ] Apply the conditional fix based on the specific error type:
   - **If "Vertical viewport was given unbounded height"**: Wrap the scrollable child (`ListView`, `GridView`) in an `Expanded` widget to consume remaining space, or wrap it in a `SizedBox` to provide an absolute height constraint.
   - **If "An InputDecorator...cannot have an unbounded width"**: Wrap the `TextField` or `TextFormField` in an `Expanded` or `Flexible` widget.
-  - **If "RenderFlex overflowed"**: Constrain the overflowing child by wrapping it in an `Expanded` widget (to force it to fit) or a `Flexible` widget (to allow it to be smaller than the allocated space).
+  - **If "RenderFlex overflowed"**: Constrain the overflowing child by wrapping it in an `Expanded` widget (to force it to fit) or a `Flexible` widget (to allow it to be smaller than the allocated space). When the overflow is vertical and appears with the keyboard open, make the body scroll (`SingleChildScrollView` or `ListView`) and leave `Scaffold.resizeToAvoidBottomInset` at its default.
   - **If "Incorrect use of ParentData widget"**: Move the `ParentDataWidget` to be a direct child of its required parent. Ensure `Expanded`/`Flexible` are direct children of `Row`/`Column`/`Flex`. Ensure `Positioned` is a direct child of `Stack`.
 - [ ] Execute Flutter hot reload.
-- [ ] Run validator -> review errors -> fix: Inspect the UI to verify the red/grey error screen or yellow/black overflow stripes are resolved. If new layout errors appear, repeat the workflow.
+- [ ] Call the Dart MCP server's `get_runtime_errors` tool, then inspect the UI to verify the red/grey error screen or yellow/black overflow stripes are resolved. If new layout errors appear, repeat the workflow.
 
 ## Examples
 

@@ -34,7 +34,7 @@ Claude and Codex use the manifests in `.claude-plugin/` and `.codex-plugin/`. Th
 | [flutter-build-form](skills/flutter-build-form/SKILL.md) | Builds a Flutter form with formz inputs, a Cubit, and stateless field widgets, wired to an existing use case. Use when adding a form, adding fields to a form, or changing form validation. | Add a login form with email and password validation |
 | [flutter-build-responsive-layout](skills/flutter-build-responsive-layout/SKILL.md) | Use `LayoutBuilder`, `MediaQuery`, or `Expanded/Flexible` to create a layout that adapts to different screen sizes. Use when you need the UI to look good on both mobile and tablet/desktop form factors. | Make the home screen responsive so it displays a grid on tablets and a list on phones |
 | [flutter-fix-layout-issues](skills/flutter-fix-layout-issues/SKILL.md) | Fixes Flutter layout errors (overflows, unbounded constraints) using Dart and Flutter MCP tools. Use when addressing "RenderFlex overflowed", "Vertical viewport was given unbounded height", or similar layout issues. | Fix the overflow error on the profile page when the keyboard is visible |
-| [flutter-implement-json-serialization](skills/flutter-implement-json-serialization/SKILL.md) | Map JSON with `dart:convert` on data-layer models that expose `fromJson`, `toJson`, and `toEntity`. Use when adding or changing API models. Keep domain entities free of JSON. | Add a UserModel with fromJson, toJson, and toEntity |
+| [flutter-implement-json-serialization](skills/flutter-implement-json-serialization/SKILL.md) | Map decoded JSON maps on data-layer models that expose `fromJson`, `toJson`, and `toEntity`. Use when adding or changing API models. Keep domain entities free of JSON. NetworkService already decodes the body. | Add a UserModel with fromJson, toJson, and toEntity |
 | [flutter-setup-declarative-routing](skills/flutter-setup-declarative-routing/SKILL.md) | Configure `MaterialApp.router` using a package like `go_router` for advanced URL-based navigation. Use when developing web applications or mobile apps that require specific deep linking and browser history support. | Set up GoRouter with paths for home, details, and settings |
 | [flutter-setup-flavors](skills/flutter-setup-flavors/SKILL.md) | Sets up environment config with envied, AppConfig, and injectable environments for a single environment, several flavors, or one more flavor such as demo or qa. Use when creating environments, adding or converting flavors, or moving hardcoded config into AppConfig. | Set up dev, pre, and prod flavors with envied |
 | [flutter-setup-localization](skills/flutter-setup-localization/SKILL.md) | Add `flutter_localizations` and `intl` dependencies, enable "generate true" in `pubspec.yaml`, and create an `l10n.yaml` configuration file. Use when initializing localization support for a new Flutter project. | Setup localization and add English and Spanish translations |
@@ -48,12 +48,15 @@ Paste this into a freshly created Flutter app. It adds only the files the app ne
 ```text
 Set up this new Flutter project using the Flutter Architecture rule.
 
-Add flutter_bloc, equatable, fpdart, get_it, injectable, injectable_generator,
-build_runner, and go_router. Add mocktail and bloc_test as dev dependencies.
+Add flutter_bloc, equatable, fpdart, get_it, injectable, and go_router.
+Add injectable_generator, build_runner, mocktail, and bloc_test as dev
+dependencies.
 
-Create app/bootstrap.dart, main.dart, configureDependencies, the Failure base
-with mapToFailure and FailureMessage, appTheme, the GoRouter table, and a
-HomePage in lib/ui/home. Use one environment and no flavors.
+Create app/app.dart (App with MaterialApp.router and theme: appTheme),
+app/bootstrap.dart, main.dart, configureDependencies in core/di/, the Failure
+base with mapToFailure and FailureMessage in core/errors/, appTheme in
+core/theme/, the GoRouter table in app/router/, and a HomePage in lib/ui/home.
+Use one environment and no flavors.
 
 Do not create empty folders or a sample feature. Run build_runner and
 dart analyze, and leave the app compiling.

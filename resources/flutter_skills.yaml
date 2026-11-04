@@ -343,7 +343,7 @@
 
     3.  **Create an `l10n.yaml` configuration file**:
         *   Add a new YAML file named `l10n.yaml` to the root directory of your Flutter project.
-        *   This file can be used to specify options like `synthetic-package: false` to generate localized messages directly into source files instead of a synthetic package. You can also specify `arb-dir` or `output-dir` in this file.
+        *   Set `arb-dir` and `template-arb-file`. Do not set `synthetic-package`: enabling it makes current Flutter stop, and the generated file is imported as `package:<app>/l10n/app_localizations.dart`.
 
     4.  **Configure `MaterialApp` or `CupertinoApp`**:
         *   Import the `flutter_localizations` library.
@@ -351,18 +351,10 @@
             ```dart
             import 'package:flutter_localizations/flutter_localizations.dart';
             // ...
-            return const MaterialApp(
-            title: 'Localizations Sample App',
-            localizationsDelegates: [
-                GlobalMaterialLocalizations.delegate,
-                GlobalWidgetsLocalizations.delegate,
-                GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: [
-                Locale('en'), // English
-                Locale('es'), // Spanish
-            ],
-            home: MyHomePage(),
+            return MaterialApp.router(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            routerConfig: router,
             );
             ```
         
@@ -428,9 +420,9 @@
     - https://pub.dev/packages/shared_preferences
     - https://docs.flutter.dev/cookbook/persistence/key-value
 - name: flutter-implement-json-serialization
-  description: Map JSON with dart:convert on data-layer models that expose
+  description: Map decoded JSON maps on data-layer models that expose
     fromJson, toJson, and toEntity. Use when adding or changing API models.
-    Keep domain entities free of JSON.
+    Keep domain entities free of JSON. NetworkService already decodes the body.
   examplePrompt: "Add a UserModel with fromJson, toJson, and toEntity"
   instructions: |
     Write a JSON skill for the feature-first architecture in rules/flutter-architecture.mdc.

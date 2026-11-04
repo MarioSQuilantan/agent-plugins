@@ -57,33 +57,25 @@ Create a new file named `l10n.yaml` in the root directory of the Flutter project
 arb-dir: lib/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
-synthetic-package: true
 ```
 
-### 4. Configure the App Entry Point
-Import the generated localizations and the `flutter_localizations` library in your `main.dart`. Inject the delegates and supported locales into your `MaterialApp` or `CupertinoApp`.
+### 4. Configure the App
+`flutter gen-l10n` writes `app_localizations.dart` into `arb-dir` (here `lib/l10n/`). Import `package:<app>/l10n/app_localizations.dart`. Do not set `synthetic-package`: enabling it makes the Flutter tool stop, and `package:flutter_gen` no longer resolves.
+
+In a project that follows the Flutter Architecture rule, register them on the `MaterialApp.router` in `lib/app/app.dart`, next to the theme and `routerConfig`. Use the generated lists so they stay in step with the `.arb` files:
 
 ```dart
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart'; // Adjust path if synthetic-package is false
+import 'package:my_app/l10n/app_localizations.dart';
 
-// ... inside build method
-return MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: const [
-    Locale('en'), // English
-    Locale('es'), // Spanish
-  ],
-  home: const MyHomePage(),
+return MaterialApp.router(
+  theme: appTheme,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  routerConfig: getIt<AppRouter>().config,
 );
 ```
 
-In a project that follows the Flutter Architecture rule, the app uses `MaterialApp.router` in `app/app.dart`. Add the delegates and locales there, next to the theme and `routerConfig`, instead of creating a second `MaterialApp`.
+A project that does not follow that rule sets the same two properties on its single `MaterialApp`.
 
 ## Implementation Workflow
 
@@ -114,7 +106,7 @@ Run the following command to trigger code generation:
 ```bash
 flutter pub get
 ```
-*Feedback Loop:* Run validator -> review terminal output for ARB syntax errors -> fix missing commas or mismatched placeholders -> re-run `flutter pub get`.
+*Feedback Loop:* Read the `flutter pub get` output for ARB syntax errors, fix missing commas or mismatched placeholders, and run it again.
 
 ### 3. Consume Localized Strings
 Access the localized strings in your widget tree using `AppLocalizations.of(context)`. Ensure the widget calling this is a descendant of `MaterialApp`.
@@ -178,14 +170,13 @@ Use the `select` syntax for conditional strings, such as gendered text.
 arb-dir: lib/l10n
 template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
-synthetic-package: true
 use-escaping: true
 ```
 
 ### Complete Widget Implementation
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:my_app/l10n/app_localizations.dart';
 
 class GreetingWidget extends StatelessWidget {
   final String userName;
