@@ -128,7 +128,7 @@
     *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders. The theme parameter is a PreviewTheme (PreviewThemeData Function()). PreviewThemeData is abstract and has apply(); subclass it and wrap the child in Theme(data: appTheme). There is no materialLight constructor. The previewer cache is the .widget_preview directory in the project root. Add a large textScaleFactor preview for text that can overflow.
 
     3. Interacting with Previews:
-    *   As of Flutter 3.38, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
+    *   With Flutter 3.47, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
     *   Alternatively, the previewer can be started from the command line by navigating to the Flutter project's root directory and running `flutter widget-preview start`. This command launches a local server and opens a Widget Preview environment in Chrome that updates automatically with project changes.
   resources:
     - https://docs.flutter.dev/tools/widget-previewer

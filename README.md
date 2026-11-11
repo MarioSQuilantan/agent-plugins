@@ -4,6 +4,10 @@ Plugin for Cursor, Claude, and Codex. It teaches an agent to build feature-first
 
 Fork of [flutter/agent-plugins](https://github.com/flutter/agent-plugins), maintained by [MarioSQuilantan](https://github.com/MarioSQuilantan/agent-plugins). The rules are `flutter-architecture`, `flutter-flavors`, and `flutter-hot-reload`. The `dart-*` skills are copied from [dart-lang/skills](https://github.com/dart-lang/skills) and are not edited here.
 
+## Flutter version
+
+This plugin targets **Flutter 3.47** stable, which ships with **Dart 3.13**. The skills and rules were checked against Flutter 3.47.9. Widget previews follow that SDK: `PreviewThemeData` is abstract and applies a theme with `apply()`, and the previewer cache is `.widget_preview/` in the project root. The IDE previewer is the one that starts with Flutter 3.47.
+
 ## Installation
 
 Install this plugin on its own. Do not keep the official Dart and Flutter plugin (`dart-flutter`) installed at the same time: the skill names match, so the agent would see two copies.
@@ -47,6 +51,7 @@ Paste this into a freshly created Flutter app. It adds only the files the app ne
 
 ```text
 Set up this new Flutter project using the Flutter Architecture rule.
+The project targets Flutter 3.47 stable.
 
 Add flutter_bloc, equatable, fpdart, get_it, injectable, and go_router.
 Add injectable_generator, build_runner, mocktail, and bloc_test as dev
