@@ -15,15 +15,17 @@
     1. **Project Setup and Dependency Management:**
         * Add the `integration_test` package as a `dev_dependency` to your `pubspec.yaml` file. This can be done by running `flutter pub add 'dev:integration_test:{"sdk":"flutter"}'`.
         * Ensure the `flutter_test` package is also included as a `dev_dependency`.
-        * Ensure `flutter_driver` is configured by importing `package:flutter_driver/driver_extension.dart' and calling `enableFlutterDriverExtension()`
+        * Enable the Flutter Driver extension only in `lib/main_driver.dart`: import `package:flutter_driver/driver_extension.dart` and call `enableFlutterDriverExtension()` before `bootstrap`. Do not add it to `main.dart` or `main_<flavor>.dart`.
 
     2. **Interactive Exploration (Flutter Driver MCP)**
         * Once configured, use the `flutter-driver` MCP tools to explore the app:
-            1.  **Launch**: Use `launch_app` with `target: "lib/main_driver.dart"`. Do not name the driver entry point `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points.
-            2.  **Inspect**: Use `get_widget_tree` to find `Key`s, `Text`, or `Type`s.
-            3.  **Interact**: Use `tap`, `enter_text`, and `scroll` to execute your flow.
-            4.  **Wait**: Always call `waitFor` or check `get_health` if transitions are slow.
-        * If a widget isn't found, it might be unmounted in a `SliverList` or `ListView`. Use `scroll` or `scrollIntoView` first.
+            1.  **Start**: Run `flutter run -t lib/main_driver.dart`. The Dart MCP server has no `launch_app` tool. Do not name the driver entry point `main_test.dart`; in a project with flavors, `main_<flavor>.dart` names flavor entry points.
+            2.  **Connect**: Call the `dtd` tool with `listDtdUris`, then `connect`. A DTD whose working directory looks like a home directory is an IDE session. Pass `appUri` when more than one app is connected.
+            3.  **Inspect**: Call `widget_inspector` with command `get_widget_tree` to find `Key`s, `Text`, or `Type`s.
+            4.  **Interact**: Call `flutter_driver_command` with `tap`, `enter_text`, or `scroll`. Those commands need `finderType` and the matching finder field.
+            5.  **Wait**: Call `flutter_driver_command` with `waitFor` or `get_health` if transitions are slow.
+        * If a widget isn't found, it might be unmounted in a `SliverList` or `ListView`. Call `flutter_driver_command` with `scroll` or `scrollIntoView` first.
+        * The written test pumps `const App()` from `lib/app/app.dart`. When the signed-out redirect exists, expect `LoginPage`, not the Flutter counter template. `pumpAndSettle` throws `FlutterError` ("pumpAndSettle timed out") while a repeating animation runs; use `pump(duration)` then.
     3. **Integration Test File Creation:**
         * Create a new directory named `integration_test/` within your project.
         * Inside this directory, create your test files with the format `<name>_test.dart`.
@@ -86,7 +88,7 @@
     4.  **Review and Refine:**
         *   Compare your code to working examples if available.
         *   Use automatic reformatting support in your Flutter editor.
-        *   Leverage Flutter's hot reload feature to accelerate development and see changes quickly.
+        *   Connect with the Dart MCP `dtd` tool (`listDtdUris`, then `connect`) before `hot_reload` or `get_runtime_errors`. Pass `appUri` when more than one app is connected. There is no `list_running_apps` tool.
   resources:
     - https://raw.githubusercontent.com/dart-lang/ai/refs/heads/main/pkgs/dart_mcp_server/README.md
     - https://docs.flutter.dev/get-started/fundamentals/layout
@@ -123,7 +125,7 @@
     *   For common configurations, extend `MultiPreview` to create a custom annotation. `MultiPreview` also provides a `transform()` method to perform transformations on each preview at runtime.
 
     2. Previews in a Cubit project:
-    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders. Apply the app theme from core/theme with the theme parameter, and add a large textScaleFactor preview for text that can overflow.
+    *   In a project that follows the Flutter Architecture rule, preview the view and field widgets, not the page. Pass plain state and no-op callbacks. Do not resolve getIt, create a Cubit, or call a service in a preview, because the page can reach services that use dart:io, which fail in the web-based previewer. Add one preview per state the view renders. The theme parameter is a PreviewTheme (PreviewThemeData Function()). PreviewThemeData is abstract and has apply(); subclass it and wrap the child in Theme(data: appTheme). There is no materialLight constructor. The previewer cache is the .widget_preview directory in the project root. Add a large textScaleFactor preview for text that can overflow.
 
     3. Interacting with Previews:
     *   As of Flutter 3.38, Android Studio, IntelliJ, and Visual Studio Code automatically start the Flutter Widget Previewer on launch.
@@ -150,11 +152,11 @@
     *   Add one use case per business operation, named <Operation>UseCase in <operation>_use_case.dart. Put business rules there; field validation belongs in form inputs. Skip the use case only when the operation forwards a single repository call and adds no rule.
     *   Add a data model with fromJson, toJson, and toEntity. Add a request type only when the call sends its own body or query object.
     *   Use the existing core service for the capability. If the package has no service, follow flutter-wrap-package-service, flutter-use-http-package for HTTP, or flutter-add-local-storage for preferences and the database.
-    *   Put the call in a feature datasource that injects the core service, decodes with fromJson (or fromRow for a database row), and maps exceptions to Failure. The datasource is the only place that creates a Failure.
+    *   Put the call in a feature datasource that injects the core service, decodes with fromJson (or fromRow for a database row), and maps exceptions to Failure. The datasource is the only place that maps an exception to a Failure. A use case may still return a domain Failure with TaskEither.left.
     *   Implement the repository, map with toEntity, and do not catch exceptions there.
-    *   Add a sealed Cubit state with value equality and a Cubit that calls the use case and emits initial, loading, success, and failure. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the await.
+    *   Add a sealed Cubit state with value equality and a Cubit that calls the use case and emits initial, loading, success, and failure. Ignore a repeated submit while a request is in flight. After an await, and inside a watch listener, return without emitting when the Cubit is closed.
     *   Provide the Cubit in the page with BlocProvider and getIt, render a view that receives state and callbacks, and trigger navigation, dialogs, and snackbars from a BlocListener.
-    *   Register repository implementations with @LazySingleton(as: Contract), datasources with @lazySingleton, and use cases and Cubits with @injectable. Regenerate injection config. Do not hand-edit generated files.
+    *   Register repository implementations with @LazySingleton(as: Contract), datasources with @lazySingleton, use cases and screen Cubits with @injectable, and an app-wide Cubit such as the session with @lazySingleton. Regenerate injection config. Do not hand-edit generated files.
     *   Add the page to the existing GoRouter table.
     *   Test the datasource with a mocked core service, and the use case and Cubit transitions when the behavior can fail or branch. Use the project's mock library; when there is none, add mocktail and bloc_test as dev dependencies and test Cubits with blocTest.
     *   Organize business code under lib/features/<feature>/{data,domain,presentation}, with presentation holding only the Cubit. Put screens in lib/ui/<screen>, every FormzInput in core/forms/inputs, and a widget used by a second page or another widget in core/widgets. Put the root widget and GoRouter table in app/, environment config in core/config, DI modules in core/di, exceptions and failures in core/errors, and every core service in its own folder under core/services/<capability> (network, secure_storage, preferences, database, and so on). A feature never imports lib/ui or core/widgets.
@@ -345,9 +347,9 @@
         *   Add a new YAML file named `l10n.yaml` to the root directory of your Flutter project.
         *   Set `arb-dir` and `template-arb-file`. Do not set `synthetic-package`: enabling it makes current Flutter stop, and the generated file is imported as `package:<app>/l10n/app_localizations.dart`.
 
-    4.  **Configure `MaterialApp` or `CupertinoApp`**:
+    4.  **Register the delegates on the app widget**:
         *   Import the `flutter_localizations` library.
-        *   Specify `localizationsDelegates` and `supportedLocales` for your `MaterialApp` or `CupertinoApp`. For example:
+        *   In a project that follows the Flutter Architecture rule, set `localizationsDelegates` and `supportedLocales` on the `MaterialApp.router` in `lib/app/app.dart`, next to the theme and `routerConfig`. A project that does not follow that rule sets the same two properties on its single `MaterialApp`. For example:
             ```dart
             import 'package:flutter_localizations/flutter_localizations.dart';
             // ...
@@ -358,8 +360,7 @@
             );
             ```
         
-        *   After these steps, Material and Cupertino packages should be correctly localized in the supported locales, and widgets should adapt to localized messages and layout.
-        *   In a project that follows the Flutter Architecture rule, add the delegates and locales to the `MaterialApp.router` in `app/app.dart`, next to the theme and `routerConfig`, instead of creating a second `MaterialApp`.
+        *   After these steps, Material and Cupertino packages should be correctly localized in the supported locales, and widgets should adapt to localized messages and layout. Do not create a second `MaterialApp`.
   resources:
     - https://docs.flutter.dev/ui/internationalization
 - name: flutter-use-http-package
@@ -405,12 +406,12 @@
     The skill must tell the agent to:
     *   Choose the store: secrets in SecureStorageService, a few flat values in PreferencesService over shared_preferences, and lists, records, cached API data, or offline-first data in DatabaseService over Drift. Never store a secret in preferences or the database. Do not add Hive, Isar, or a second database package.
     *   Put PreferencesService, its SharedPreferencesAsync impl, and PreferenceKeys in core/services/preferences. Register SharedPreferencesAsync in a @module in core/di. Translate PlatformException into StorageException.
-    *   Put the single Drift AppDatabase, its tables, DbTables, DatabaseService, and its impl in core/services/database. Open the database with driftDatabase from drift_flutter, and register it once in a @module with a dispose that closes it. Only that folder and its module import drift.
+    *   Put the single Drift AppDatabase, its tables, DbTables, DatabaseService, and its impl in core/services/database. Open the database with driftDatabase from drift_flutter inside the @module, and register one AppDatabase with a dispose that closes it. AppDatabase and its tables import package:drift. Nothing else in lib/ does. A test of that service may import it to open an in-memory database.
     *   Make DatabaseService generic like NetworkService: query, watch, insert, update, delete, and transaction over a table name and Map<String, Object?> rows. Bind values as ? arguments, reject unknown tables and columns, name the table in readsFrom and updates so watches refresh, and turn every Exception, including DriftRemoteException from the background isolate, into DatabaseException.
     *   Take column names from DbTables in the Drift table with named(), add fromRow and toRow to the feature model, and convert bool to 0 or 1 and DateTime to Unix seconds.
     *   In the local datasource, wrap calls in TaskEither.tryCatch with mapToFailure, map DatabaseException and StorageException to StorageFailure, and return Stream<Either<Failure, T>> from a watch, turning stream errors into Left.
-    *   For offline-first, the screen reads the local watch, and a refresh fetches remotely and replaces the rows in a transaction. The Cubit subscribes to the watch and cancels it in close.
-    *   Bump schemaVersion with a step in onUpgrade for each shipped schema change, keep new columns nullable or defaulted, remember that onUpgrade also runs on a downgrade, and export schemas with drift_dev make-migrations once the app has shipped.
+    *   For offline-first, the screen reads the local watch, and a refresh fetches remotely and replaces the rows in a transaction. The Cubit subscribes to the watch, returns without emitting when it is closed, and cancels the subscription in close. A failure after rows have loaded keeps those rows and sets refreshFailure. A Left before any rows emits the failure state.
+    *   Bump schemaVersion with a step in onUpgrade for each shipped schema change, keep new columns nullable or defaulted, and remember that onUpgrade also runs on a downgrade. A step checks the schema it is leaving (from < 2) and does not assume that from is less than to. Export schemas with drift_dev make-migrations once the app has shipped.
     *   Test the service against NativeDatabase.memory with closeStreamsSynchronously, the datasource with a mocked service, and the Cubit with blocTest. If bloc_test and the newest drift_dev conflict on analyzer, keep bloc_test and let pub choose an older drift_dev.
   resources:
     - https://pub.dev/packages/drift
@@ -460,15 +461,15 @@
     *   Catch SDK exceptions in the impl and throw app exceptions from core/errors. Add each new exception to the exception-to-Failure helper. Do not create a Failure in the service.
     *   Register the impl with @LazySingleton(as: Interface) unless siblings differ, and register the SDK instance with a @lazySingleton getter in a @module. Never call GetIt.I.register* by hand in app code.
     *   Inject the interface into the datasource constructor. Datasources, Cubits, and widgets never instantiate an SDK.
-    *   Put every service in its own folder under core/services/<capability>, with the interface, the impl, and the types only that service uses (keys, events). Do not create core/network or core/storage. Leave @module classes in core/di. Defer HTTP to flutter-use-http-package and preferences or the Drift database to flutter-add-local-storage. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
+    *   Put every service in its own folder under core/services/<capability>, with the interface, the impl, and the types only that service uses (keys, events). Do not create core/network or core/storage. Leave @module classes in core/di. Only the impl and its module import the SDK, except Drift, which flutter-add-local-storage owns: AppDatabase and its tables also import package:drift. Defer HTTP to flutter-use-http-package and preferences or the Drift database to flutter-add-local-storage. Regenerate injection config and run the formatter, dart analyze, and the datasource tests.
   resources:
     - https://pub.dev/packages/injectable
     - https://pub.dev/packages/get_it
     - https://pub.dev/packages/flutter_secure_storage
 - name: flutter-build-form
-  description: Builds a Flutter form with formz inputs, a Cubit, and stateless
-    field widgets, wired to an existing use case. Use when adding a form,
-    adding fields to a form, or changing form validation.
+  description: Builds a Flutter form with formz inputs, a Cubit, and field
+    widgets, wired to an existing use case. Use when adding a form, adding
+    fields to a form, or changing form validation.
   examplePrompt: "Add a login form with email and password validation"
   instructions: |
     Write a form skill for the feature-first architecture in rules/flutter-architecture.mdc. The Cubit stays in the feature; the form UI lives in lib/ui.
@@ -478,10 +479,10 @@
     *   Read the form from YAML (form, feature, fields with validators, submit use case) or plain language, and ask only when something is unclear.
     *   Add formz only when pubspec.yaml does not depend on it. Reuse sibling forms and inputs in core/forms/inputs before creating new ones.
     *   Create one FormzInput per field with an error enum and validator, always in core/forms/inputs. An input is rarely used by only one feature, so never create it inside a feature. Field validation lives only there. The page, form, and field widgets used only by that screen go in lib/ui/<form>. A field widget used by a second screen goes in core/widgets.
-    *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context). An input never reads a BuildContext.
+    *   Add an extension on each error enum that returns the message. With localizations, the extension takes AppLocalizations as a parameter and the widget passes AppLocalizations.of(context)!. An input never reads a BuildContext.
     *   Use one state class with the inputs, FormzMixin, FormzSubmissionStatus, and the last Failure, with value equality, not a sealed class or a Freezed union. Use Freezed only when the project already depends on it; otherwise extend Equatable and write copyWith by hand.
     *   In the Cubit, add one method per field change and a submit that marks inputs dirty, stops on Formz.validate failure, ignores calls while in progress, runs the <Operation>UseCase, returns if the Cubit closed while waiting, and emits success or failure.
-    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Turn the failure into text by matching the feature's own failures first and falling back to the core FailureMessage extension. Pass values, errors, and callbacks to stateless field widgets, rebuilding each with its own BlocSelector.
+    *   Provide the Cubit in the page with BlocProvider and getIt, and react to status in a BlocListener. A sign-in or sign-up form does not navigate on success; the session changes and the router redirect moves the user. Turn the failure into text by matching the feature's own failures first and falling back to the core FailureMessage extension. Pass values, errors, and callbacks to field widgets, rebuilding each with its own BlocSelector. A password field may be a StatefulWidget only to toggle visibility.
     *   Use initialValue and onChanged. Use a TextEditingController only when the Cubit must write the text. Allow setState only for local toggles such as password visibility.
     *   If the submit use case does not exist, ask before creating domain or data code.
     *   Test input validators, Cubit transitions with blocTest, and field widgets with plain values. Mock the use case with the project's mock library, or mocktail when there is none, and register a fallback value for its params type.
@@ -505,7 +506,7 @@
     *   Create one .env.<flavor> file and a committed .example twin per flavor, ignore .env files and generated env files in git, and add one @Envied class per flavor in core/config/env. Obfuscated fields are static final.
     *   Create an AppConfig class in core/config with one implementation per flavor registered with @LazySingleton(as: AppConfig, env: ['<flavor>']). Shared values live once in AppConfig.
     *   Make the DI setup take the environment, add a shared bootstrap in app/, and one main_<flavor>.dart per flavor that only calls it.
-    *   Configure Android productFlavors and iOS build configurations, xcconfig files, schemes named after the flavor, and Podfile mappings. List iOS steps for the user when they cannot be verified.
+    *   Configure Android productFlavors and, on iOS, three xcconfig files per flavor (Debug, Release, and Profile). Profile includes Release.xcconfig. Each file also includes that configuration's Pods-Runner xcconfig. Add schemes named after the flavor and Podfile mappings. List iOS steps for the user when they cannot be verified.
     *   Create .vscode/launch.json when it is missing, with one entry per flavor that runs --flavor <flavor> with lib/main_<flavor>.dart. When it exists, add only the missing entries. Warn when .gitignore ignores .vscode/.
     *   Run build_runner clean before build, run or build each touched flavor, and report which flavors were verified.
   resources:

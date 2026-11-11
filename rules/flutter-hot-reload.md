@@ -13,7 +13,7 @@ Whenever you edit or modify any `.dart` file under `lib/` in this project:
    - **Comments & Documentation**: Do not trigger hot reload or hot restart when changes only affect comments, docstrings, or whitespace.
 
 2. **Discover & Connect**:
-   - Discover active running application instances with the Dart MCP server's `list_running_apps` tool, then call `hot_reload` or `hot_restart`.
+   - Connect with the Dart MCP server's `dtd` tool before `hot_reload` or `hot_restart`. Call `listDtdUris`, then `connect` with that URI. A DTD whose working directory looks like a home directory is an IDE session. There is no `list_running_apps` tool. When more than one app is connected, pass `appUri`.
 
 3. **Trigger Hot Reload / Hot Restart**:
    - Execute the `hot_reload` MCP tool immediately after making changes to UI widgets (including `build` methods of stateful widgets) or simple methods.

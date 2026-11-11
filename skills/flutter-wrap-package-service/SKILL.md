@@ -7,7 +7,7 @@ metadata:
 ---
 # Wrapping a Package in a Core Service
 
-Follow the Flutter Architecture rule. The app talks to a capability, not to a package. Only the service impl and its DI module import the SDK.
+Follow the Flutter Architecture rule. The app talks to a capability, not to a package. Only the service impl and its DI module import the SDK. Drift is the exception owned by `flutter-add-local-storage`: `AppDatabase` and its tables also import `package:drift`, and a test of that service may import it to open an in-memory database.
 
 For HTTP, use `flutter-use-http-package`, which defines `NetworkService`. For preferences and the Drift database, use `flutter-add-local-storage`, which defines `PreferencesService` and `DatabaseService`. This skill covers every other infrastructure package and the general pattern.
 

@@ -37,7 +37,7 @@ Copy and use this checklist to systematically resolve layout constraint violatio
   - **If "RenderFlex overflowed"**: Constrain the overflowing child by wrapping it in an `Expanded` widget (to force it to fit) or a `Flexible` widget (to allow it to be smaller than the allocated space). When the overflow is vertical and appears with the keyboard open, make the body scroll (`SingleChildScrollView` or `ListView`) and leave `Scaffold.resizeToAvoidBottomInset` at its default.
   - **If "Incorrect use of ParentData widget"**: Move the `ParentDataWidget` to be a direct child of its required parent. Ensure `Expanded`/`Flexible` are direct children of `Row`/`Column`/`Flex`. Ensure `Positioned` is a direct child of `Stack`.
 - [ ] Execute Flutter hot reload.
-- [ ] Call the Dart MCP server's `get_runtime_errors` tool, then inspect the UI to verify the red/grey error screen or yellow/black overflow stripes are resolved. If new layout errors appear, repeat the workflow.
+- [ ] Connect with the Dart MCP server's `dtd` tool (`listDtdUris`, then `connect`) and call `get_runtime_errors`. Pass `appUri` when more than one app is connected. Then inspect the UI to verify the red/grey error screen or yellow/black overflow stripes are resolved. If new layout errors appear, repeat the workflow.
 
 ## Examples
 

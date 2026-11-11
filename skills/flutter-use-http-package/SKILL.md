@@ -79,7 +79,7 @@ Failure mapToFailure(Object error, StackTrace stackTrace) => switch (error) {
     };
 ```
 
-The signature matches `TaskEither.tryCatch`, so datasources pass `mapToFailure` directly. When the project has a logger or crash reporter, report the unexpected case there before returning `UnexpectedFailure`.
+The signature matches `TaskEither.tryCatch`, so datasources pass `mapToFailure` directly. When the project has a database, add `DatabaseException() => const StorageFailure()` beside `StorageException`, as `flutter-add-local-storage` describes. When the project has a logger or crash reporter, report the unexpected case there before returning `UnexpectedFailure`. A use case may still return a domain `Failure` with `TaskEither.left`; it does not catch exceptions.
 
 Use the project's `Failure` types when they exist. Create them in `core/errors/` only when the project has none. The base class is `abstract`, not `sealed`, so a feature can add its own failures in `domain/failures/`. Failures have value equality:
 

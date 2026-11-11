@@ -34,7 +34,7 @@ The `@Preview` annotation supports the following parameters for tailoring previe
 - `size`: Artificial constraints using a `Size` object.
 - `textScaleFactor`: Custom font scale factor.
 - `wrapper`: A function that wraps the previewed widget in a specific widget tree (e.g., to inject state or inherited widgets).
-- `theme`: A function returning a `PreviewThemeData` with Material and Cupertino light and dark themes.
+- `theme`: A `PreviewTheme`, which is `PreviewThemeData Function()`. `PreviewThemeData` is abstract and exposes `apply()`; it has no `materialLight` constructor. Subclass it and wrap the child in `Theme`, or combine subclasses with `MultiPreviewThemeData`.
 - `brightness`: The initial theme `Brightness` (`Brightness.light` or `Brightness.dark`).
 - `localizations`: A function applying a localization configuration.
 
@@ -58,7 +58,15 @@ In a project that follows the Flutter Architecture rule, preview the view and fi
 - Apply the app theme from `core/theme/` with the `theme` parameter, so text sizes match the app. Add a preview with a large `textScaleFactor` for text that can overflow.
 
 ```dart
-PreviewThemeData appPreviewTheme() => PreviewThemeData(materialLight: appTheme);
+final class AppPreviewTheme extends PreviewThemeData {
+  const AppPreviewTheme();
+
+  @override
+  Widget apply(BuildContext context, Widget child) =>
+      Theme(data: appTheme, child: child);
+}
+
+PreviewThemeData appPreviewTheme() => const AppPreviewTheme();
 
 @Preview(name: 'Profile loaded', group: 'Profile', theme: appPreviewTheme)
 Widget profileLoadedPreview() => ProfileView(
@@ -126,11 +134,9 @@ final class ThemedPreview extends Preview {
     super.brightness,
   });
 
+  // AppPreviewTheme is the PreviewThemeData subclass shown above.
   // appTheme comes from core/theme/. Use the project's dark theme when it has one.
-  PreviewThemeData _themeBuilder() => PreviewThemeData(
-        materialLight: appTheme,
-        materialDark: appTheme,
-      );
+  PreviewThemeData _themeBuilder() => const AppPreviewTheme();
 
   @override
   Preview transform() {

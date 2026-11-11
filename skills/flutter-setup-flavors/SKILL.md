@@ -173,7 +173,19 @@ For each flavor:
 
 1. In Xcode, duplicate the `Debug`, `Release`, and `Profile` build configurations as `Debug-<flavor>`, `Release-<flavor>`, and `Profile-<flavor>`.
 2. Create a shared scheme named exactly `<flavor>` that uses those configurations. Flutter selects the scheme by the `--flavor` name.
-3. Add `ios/Flutter/<flavor>.xcconfig` that includes the matching `Debug.xcconfig` or `Release.xcconfig` and sets the bundle ID suffix and display name, and assign it to the new configurations. Also include the CocoaPods file for that configuration, `Pods/Target Support Files/Pods-Runner/Pods-Runner.<config>-<flavor>.xcconfig` (lowercase config name, for example `Pods-Runner.debug-dev.xcconfig`). Without it CocoaPods warns that the base configuration was not set.
+3. Add three xcconfig files per flavor, one for each configuration, and assign each file to that configuration. One file cannot serve Debug, Release, and Profile, because each includes a different base and a different Pods file:
+   - `ios/Flutter/Debug-<flavor>.xcconfig` includes `Debug.xcconfig` and `Pods-Runner.debug-<flavor>.xcconfig`.
+   - `ios/Flutter/Release-<flavor>.xcconfig` includes `Release.xcconfig` and `Pods-Runner.release-<flavor>.xcconfig`.
+   - `ios/Flutter/Profile-<flavor>.xcconfig` includes `Release.xcconfig` and `Pods-Runner.profile-<flavor>.xcconfig`.
+   Each file also sets the bundle ID suffix and display name. The Pods path is `Pods/Target Support Files/Pods-Runner/Pods-Runner.<config>-<flavor>.xcconfig`, with a lowercase config name. CocoaPods warns when that include is missing.
+
+```xcconfig
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"
+#include "Debug.xcconfig"
+
+// Use the same bundle id and display-name keys the project already uses.
+FLUTTER_TARGET=lib/main_dev.dart
+```
 4. Map the configurations in the `Podfile` (`'Debug-dev' => :debug`, `'Release-dev' => :release`, `'Profile-dev' => :release`), then run `pod install`.
 
 Xcode project edits are error-prone from the command line. When they cannot be verified on a Mac, list the remaining iOS steps for the user instead of claiming they are done.

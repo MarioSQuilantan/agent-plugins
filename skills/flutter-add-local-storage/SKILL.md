@@ -490,7 +490,7 @@ class TodosLocalDataSource {
 }
 ```
 
-The watch turns every error into a `Left`, so the stream never ends with an exception and the datasource stays the only place that creates a `Failure`.
+The watch turns every error into a `Left`, so the stream never ends with an exception. The datasource is still the only place that maps that error to a `Failure`.
 
 ### Repository and offline-first
 
@@ -567,9 +567,17 @@ class TodosCubit extends Cubit<TodosState> {
   StreamSubscription<Either<Failure, List<Todo>>>? _subscription;
 
   void watch() {
-    _subscription ??= _repository.watchTodos().listen(
-          (result) => emit(result.fold(TodosFailure.new, TodosLoaded.new)),
-        );
+    _subscription ??= _repository.watchTodos().listen((result) {
+      if (isClosed) return;
+      emit(
+        result.fold((failure) {
+          final current = state;
+          return current is TodosLoaded
+              ? TodosLoaded(current.todos, refreshFailure: failure)
+              : TodosFailure(failure);
+        }, TodosLoaded.new),
+      );
+    });
   }
 
   Future<void> refresh() async {
@@ -593,7 +601,7 @@ class TodosCubit extends Cubit<TodosState> {
 }
 ```
 
-Watching and refreshing each forward one repository call, so the Cubit calls the repository directly; put any rule in a use case. The page creates the Cubit with `getIt<TodosCubit>()..watch()..refresh()`, renders with `BlocBuilder`, and shows `refreshFailure` in a snackbar from a `BlocListener` whose `listenWhen` checks that it changed. When the refresh fails before the cache is read, the next watch emission replaces `TodosFailure` with the cached rows.
+Watching and refreshing each forward one repository call, so the Cubit calls the repository directly; put any rule in a use case. The page creates the Cubit with `getIt<TodosCubit>()..watch()..refresh()`, renders with `BlocBuilder`, and shows `refreshFailure` in a snackbar from a `BlocListener` whose `listenWhen` checks that it changed. A failure after rows have loaded, from the refresh or from a later watch emission, keeps those rows and sets `refreshFailure`. A `Left` before any rows emits `TodosFailure`. The next successful watch replaces `TodosFailure` with the cached rows.
 
 ### Migrations
 
@@ -616,7 +624,7 @@ MigrationStrategy get migration => MigrationStrategy(
 
 - Add the new constant to `TodosColumns` and the column to the table, then update `fromRow` and `toRow`.
 - A new column on an existing table is nullable or has a default, or the upgrade fails on existing rows.
-- Drift also calls `onUpgrade` on a downgrade (`from > to`). Do not assume `from < to`.
+- Drift also calls `onUpgrade` on a downgrade (`from > to`). A step checks the schema it is leaving (`from < 2`). It does not assume that `from` is less than `to`.
 - Once the app has shipped, export each schema with `dart run drift_dev make-migrations` (configure `databases` in `build.yaml`), and prefer the generated `stepByStep` helper. Test each step with `SchemaVerifier`, following the Drift migration testing guide.
 - Never edit an old step after release; add a new one.
 
@@ -624,7 +632,7 @@ MigrationStrategy get migration => MigrationStrategy(
 
 - **Service.** Test `DatabaseServiceImpl` against an in-memory database: `AppDatabase(DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true))` in `setUp`, and `database.close()` in `tearDown`. Cover insert and query, a watch that emits after an update, a constraint violation that throws `DatabaseException`, and a transaction that rolls back.
 - **Datasource.** Mock `DatabaseService` or `PreferencesService` with the project's mock library (`mocktail` when there is none), as with `NetworkService`. Cover decoding, a `DatabaseException` that becomes `StorageFailure`, a malformed row that becomes `SerializationFailure`, and a stream error that becomes a `Left`.
-- **Cubit.** Mock the repository and stub `watchTodos()` with `Stream.fromIterable([...])`. Use `blocTest` for the emitted states, including a failed refresh after the rows loaded, which keeps the rows and sets `refreshFailure`.
+- **Cubit.** Mock the repository and stub `watchTodos()` with `Stream.fromIterable([...])`. Use `blocTest` for the emitted states, including a failed refresh or a later watch `Left` after the rows loaded, which keeps the rows and sets `refreshFailure`.
 - **Integration.** An integration test that needs a clean database registers `AppDatabase(NativeDatabase.memory())` in a scope pushed with `getIt.pushNewScope` after the DI setup.
 
 ## Do not

@@ -24,7 +24,7 @@ Copy this checklist and complete it in order.
 - [ ] **5. Core service.** Use the existing core service in `core/services/<capability>/` (`NetworkService`, `SecureStorageService`, `PreferencesService`, `DatabaseService`, and so on). If the package has no service yet, follow `flutter-wrap-package-service`, `flutter-use-http-package` for HTTP, or `flutter-add-local-storage` for preferences and the database.
 - [ ] **6. Datasource.** Add the call under `data/datasources/`. Inject the core service, decode with `fromJson` or `fromRow`, and map exceptions to `Failure` with the helper in `core/errors/`. No SDK imports.
 - [ ] **7. Repository.** Implement the contract under `data/repositories/`. Map the model with `toEntity()`. Do not catch exceptions here.
-- [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight, and return without emitting when the Cubit closed during the `await`.
+- [ ] **8. Cubit.** Add a `sealed` state with value equality and a `Cubit<State>` under `presentation/cubit/`. The Cubit calls the use case and emits `initial`, `loading`, success, and `failure`. Ignore a repeated submit while a request is in flight. After an `await`, and inside a watch listener, return without emitting when the Cubit is closed.
 - [ ] **9. UI.** Add the page under `lib/ui/<screen>/`. It may use the Cubits of any feature. Provide this screen's Cubit with `BlocProvider(create: (_) => getIt<XCubit>())` and render a view that receives state and callbacks. A widget used only by this screen stays beside the page. Move it to `core/widgets/` when a second page or another widget needs it. Render with `BlocBuilder` and trigger navigation, dialogs, and snackbars from a `BlocListener`.
 - [ ] **10. Register.** Use `@LazySingleton(as: Contract)` for the repository implementation, `@lazySingleton` for the datasource, `@injectable` for use cases and screen Cubits, and `@lazySingleton` for an app-wide Cubit such as the session. Regenerate the injection config with the project's `build_runner` command. Do not edit `*.config.dart` by hand.
 - [ ] **11. Route.** Add the page to the existing GoRouter table.
@@ -94,7 +94,7 @@ class EmailNotVerifiedFailure extends Failure {
 }
 ```
 
-Datasources, the only place that creates a `Failure`. The remote one calls the API; the local one stores the token through `SecureStorageService` with the shared key from `core/services/secure_storage/storage_keys.dart`:
+Datasources map exceptions to a `Failure`. A use case may still return a domain `Failure` with `TaskEither.left`, as `SignInUseCase` does below. The remote datasource calls the API; the local one stores the token through `SecureStorageService` with the shared key from `core/services/secure_storage/storage_keys.dart`:
 
 ```dart
 @lazySingleton
@@ -287,9 +287,10 @@ class SessionAuthenticated extends SessionState {
 class SessionCubit extends Cubit<SessionState> {
   SessionCubit(this._repository)
       : super(_stateFor(_repository.currentUser)) {
-    _subscription = _repository
-        .watchSession()
-        .listen((user) => emit(_stateFor(user)));
+    _subscription = _repository.watchSession().listen((user) {
+      if (isClosed) return;
+      emit(_stateFor(user));
+    });
   }
 
   final AuthRepository _repository;

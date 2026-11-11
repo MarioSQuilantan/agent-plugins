@@ -25,7 +25,7 @@ Copy and track this checklist when initializing internationalization in a Flutte
   - [ ] 1. Add dependencies to `pubspec.yaml`.
   - [ ] 2. Enable the `generate` flag.
   - [ ] 3. Create the `l10n.yaml` configuration file.
-  - [ ] 4. Configure `MaterialApp` or `CupertinoApp`.
+  - [ ] 4. Register the delegates on `MaterialApp.router` in `lib/app/app.dart`, or on the single `MaterialApp` when the project does not follow the architecture rule.
 
 ### 1. Add Dependencies
 Add the required localization packages to the project. Execute the following commands in the terminal:

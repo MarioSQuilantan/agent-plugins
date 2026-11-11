@@ -34,11 +34,12 @@ Configure the project to support integration testing and Flutter Driver extensio
 
 Use the Dart/Flutter MCP server tools to interactively explore and manipulate the application state before writing static tests.
 
-- **Launch**: Execute `launch_app` with `target: "lib/main_driver.dart"` to start the application and acquire the DTD URI.
-- **Inspect**: Execute `get_widget_tree` to discover available `Key`s, `Text` nodes, and widget `Type`s.
-- **Interact**: Call the `flutter_driver` tool with the `tap`, `enter_text`, or `scroll` command to simulate user flows.
-- **Wait**: Call `flutter_driver` with `waitFor`, or check `get_health`, when navigating or triggering animations.
-- **Troubleshoot Unmounted Widgets**: If a widget is not found in the tree, it may be lazily loaded in a `SliverList` or `ListView`. Call `flutter_driver` with `scroll` or `scrollIntoView` to force the widget to mount before interacting with it.
+- **Start the app**: Run `flutter run -t lib/main_driver.dart`. The Dart MCP server has no `launch_app` tool.
+- **Connect**: Call the `dtd` tool with `listDtdUris`, then `connect` with that URI. A DTD whose working directory looks like a home directory is an IDE session. `hot_reload`, `widget_inspector`, and `flutter_driver_command` need that connection. Pass `appUri` when more than one app is connected.
+- **Inspect**: Call `widget_inspector` with command `get_widget_tree` to discover available `Key`s, `Text` nodes, and widget `Type`s.
+- **Interact**: Call `flutter_driver_command` with `tap`, `enter_text`, or `scroll`. Those commands need `finderType` and the matching finder field.
+- **Wait**: Call `flutter_driver_command` with `waitFor`, or `get_health`, when navigating or triggering animations.
+- **Troubleshoot Unmounted Widgets**: If a widget is not found in the tree, it may be lazily loaded in a `SliverList` or `ListView`. Call `flutter_driver_command` with `scroll` or `scrollIntoView` to force the widget to mount before interacting with it.
 
 ## Test Authoring Guidelines
 
@@ -79,55 +80,44 @@ Copy and follow this checklist to implement and verify integration tests.
   - [ ] Add `lib/main_driver.dart` that enables the driver extension and then calls `bootstrap`.
   - [ ] Assign `ValueKey`s to target widgets.
 - [ ] **Task Progress: Exploration**
-  - [ ] Run `launch_app` via MCP.
-  - [ ] Map the widget tree using `get_widget_tree`.
-  - [ ] Validate interaction paths using MCP tools (`tap`, `enter_text`).
+  - [ ] Start the app with `flutter run -t lib/main_driver.dart`, then connect with the `dtd` tool.
+  - [ ] Map the widget tree with `widget_inspector` command `get_widget_tree`.
+  - [ ] Validate interaction paths with `flutter_driver_command` (`tap`, `enter_text`).
 - [ ] **Task Progress: Authoring**
   - [ ] Create `integration_test/app_test.dart`.
   - [ ] Write test cases using `WidgetTester` APIs.
   - [ ] Create `test_driver/integration_test.dart` with `integrationDriver()`.
 - [ ] **Task Progress: Execution & Feedback Loop**
   - [ ] Run `flutter drive --driver=test_driver/integration_test.dart --target=integration_test/app_test.dart`.
-  - [ ] **Feedback Loop**: Review test output -> If `PumpAndSettleTimedOutException` occurs, check for infinite animations -> If widget not found, add `scrollUntilVisible` -> Re-run test until passing.
+  - [ ] **Feedback Loop**: Review test output -> If `pumpAndSettle` throws `FlutterError` with "pumpAndSettle timed out", a repeating animation is still running; use `pump(duration)` -> If a widget is not found, add `scrollUntilVisible` -> Re-run the test until it passes.
 
 ## Examples
 
 ### Standard Integration Test (`integration_test/app_test.dart`)
 
 ```dart
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:my_app/app/app.dart';
 import 'package:my_app/core/di/injection.dart';
+import 'package:my_app/ui/login/login_page.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('End-to-end test', () {
-    testWidgets('tap on the floating action button, verify counter', (tester) async {
+    testWidgets('a signed-out session opens the login page', (tester) async {
       // Register dependencies when the app uses get_it and injectable.
       // Pass the flavor only when the project has flavors, and await the call
-      // when the project's setup is async. This skips bootstrap, which also
-      // calls runApp.
+      // when the project's setup is async. This skips bootstrap, so the
+      // session is still signed out and the redirect sends the user to /login.
+      // A project with no auth flow asserts its home page in lib/ui instead.
       configureDependencies();
 
       await tester.pumpWidget(const App());
-
-      // Verify the counter starts at 0.
-      expect(find.text('0'), findsOneWidget);
-
-      // Find the floating action button to tap on.
-      final fab = find.byKey(const ValueKey('increment'));
-
-      // Emulate a tap on the floating action button.
-      await tester.tap(fab);
-
-      // Trigger a frame and wait for animations.
       await tester.pumpAndSettle();
 
-      // Verify the counter increments by 1.
-      expect(find.text('1'), findsOneWidget);
+      expect(find.byType(LoginPage), findsOneWidget);
     });
   });
 }
