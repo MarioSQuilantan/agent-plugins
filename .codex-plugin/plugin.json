@@ -1,6 +1,6 @@
 {
   "name": "flutter-clean-architecture",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Flutter skills and rules for feature-first Clean Architecture with Cubit, use cases, FpDart, injectable, GoRouter, formz, and envied flavors, plus the Dart MCP server.",
   "author": {
     "name": "MarioSQuilantan",
