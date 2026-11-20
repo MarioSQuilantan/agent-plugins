@@ -29,6 +29,7 @@
       "MCP"
     ],
     "websiteURL": "https://github.com/MarioSQuilantan/agent-plugins",
+    "supportURL": "https://github.com/MarioSQuilantan/agent-plugins/issues",
     "composerIcon": "./assets/flutter-icon.svg",
     "logo": "./assets/flutter-icon.svg",
     "privacyPolicyURL": "https://policies.google.com/privacy",
